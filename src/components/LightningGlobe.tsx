@@ -1,14 +1,14 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useRef } from "react";
-import * as Cesium from "cesium";
-import "cesium/Build/Cesium/Widgets/widgets.css";
+import { useCallback, useEffect, useRef } from 'react';
+import * as Cesium from 'cesium';
+import 'cesium/Build/Cesium/Widgets/widgets.css';
 
-import { ION_TOKEN, hasIonToken } from "@/lib/ion";
-import type { Flash } from "@/lib/types";
-import styles from "./LightningGlobe.module.css";
+import { ION_TOKEN, hasIonToken } from '@/lib/ion';
+import type { Flash } from '@/lib/types';
+import styles from './LightningGlobe.module.css';
 
-export type PlaybackMode = "all" | "playback";
+export type PlaybackMode = 'all' | 'playback';
 
 /**
  * A request to point the camera at a flash.
@@ -45,16 +45,12 @@ const LOG_E_MAX = Math.log10(1e-12);
 // The dim end stays clearly visible against bright terrain -- a darker blue
 // reads as "nothing there" at regional zoom, which is the wrong impression for
 // a detection that did happen.
-const DIM = Cesium.Color.fromCssColorString("#8fd4ff");
-const BRIGHT = Cesium.Color.fromCssColorString("#fffbe0");
+const DIM = Cesium.Color.fromCssColorString('#8fd4ff');
+const BRIGHT = Cesium.Color.fromCssColorString('#fffbe0');
 
 function energyColor(energy: number | null): Cesium.Color {
   if (energy === null || energy <= 0) return Cesium.Color.WHITE;
-  const x = Cesium.Math.clamp(
-    (Math.log10(energy) - LOG_E_MIN) / (LOG_E_MAX - LOG_E_MIN),
-    0,
-    1,
-  );
+  const x = Cesium.Math.clamp((Math.log10(energy) - LOG_E_MIN) / (LOG_E_MAX - LOG_E_MIN), 0, 1);
   return Cesium.Color.lerp(DIM, BRIGHT, x, new Cesium.Color());
 }
 
@@ -110,8 +106,8 @@ export default function LightningGlobe({
             baseLayer: Cesium.ImageryLayer.fromProviderAsync(
               Promise.resolve(
                 new Cesium.OpenStreetMapImageryProvider({
-                  url: "https://tile.openstreetmap.org/",
-                  credit: new Cesium.Credit("© OpenStreetMap contributors"),
+                  url: 'https://tile.openstreetmap.org/',
+                  credit: new Cesium.Credit('© OpenStreetMap contributors'),
                 }),
               ),
               {},
@@ -142,9 +138,25 @@ export default function LightningGlobe({
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
     handlerRef.current = handler;
 
-    if (process.env.NODE_ENV === "development") {
+    if (process.env.NODE_ENV === 'development') {
       (window as unknown as Record<string, unknown>).viewer = viewer;
     }
+
+    // Draw the ingest bbox outline once. Rectangle stores its bounds in
+    // radians, so they're converted to degrees before building the corners
+    const w = Cesium.Math.toDegrees(HOME.west);
+    const s = Cesium.Math.toDegrees(HOME.south);
+    const e = Cesium.Math.toDegrees(HOME.east);
+    const n = Cesium.Math.toDegrees(HOME.north);
+    viewer.entities.add({
+      name: 'Northern Rockies ingest bbox',
+      polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArray([w, s, e, s, e, n, w, n, w, s]),
+        material: Cesium.Color.RED,
+        width: 3,
+        clampToGround: true,
+      },
+    });
 
     return () => {
       if (handlerRef.current && !handlerRef.current.isDestroyed()) handlerRef.current.destroy();
@@ -163,7 +175,8 @@ export default function LightningGlobe({
     // Batch: without this Cesium fires a change event per entity and the
     // visualizers re-run for every single one.
     entities.suspendEvents();
-    entities.removeAll();
+    // Remove only the flash entities this effect owns
+    for (const id of byEntityId.current.keys()) entities.removeById(id);
     byEntityId.current.clear();
 
     for (const flash of flashes) {
@@ -177,7 +190,7 @@ export default function LightningGlobe({
         // In "all" mode the entity has no availability, so it ignores the
         // clock entirely and simply stays on screen.
         availability:
-          mode === "playback"
+          mode === 'playback'
             ? new Cesium.TimeIntervalCollection([
                 new Cesium.TimeInterval({
                   start,
@@ -195,6 +208,7 @@ export default function LightningGlobe({
         },
       });
     }
+
     entities.resumeEvents();
   }, [flashes, mode, trailSeconds]);
 
@@ -211,7 +225,7 @@ export default function LightningGlobe({
     viewer.clock.currentTime = start.clone();
     viewer.clock.clockRange = Cesium.ClockRange.LOOP_STOP;
     viewer.clock.multiplier = speed;
-    viewer.clock.shouldAnimate = mode === "playback";
+    viewer.clock.shouldAnimate = mode === 'playback';
     viewer.timeline?.zoomTo(start, stop);
   }, [windowStart, windowEnd, speed, mode]);
 
@@ -232,7 +246,7 @@ export default function LightningGlobe({
     // pause the clock keeps running at the current multiplier, so at 300x a
     // 300-data-second trail is lit for about one wall second and the thing you
     // just clicked on vanishes before you can look at it.
-    if (modeRef.current === "playback") {
+    if (modeRef.current === 'playback') {
       viewer.clock.currentTime = Cesium.JulianDate.fromIso8601(focus.flash.t);
       viewer.clock.shouldAnimate = false;
     }
