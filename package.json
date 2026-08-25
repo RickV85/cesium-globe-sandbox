@@ -7,7 +7,7 @@
     "predev": "npm run copy-cesium",
     "dev": "next dev",
     "prebuild": "npm run copy-cesium",
-    "build": "next build --webpack",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
