@@ -7,7 +7,7 @@ import "cesium/Build/Cesium/Widgets/widgets.css";
 import { LESSONS } from "@/lessons";
 import type { Lesson } from "@/lessons";
 import { resetScene } from "@/lessons/scene";
-import { NOAA_LAYERS, createNoaaImageryProvider, latestTimestamp } from "@/lib/noaa";
+import { NOAA_LAYERS, createNoaaImageryProvider, ignoreMissingTiles } from "@/lib/noaa";
 import { ION_TOKEN, hasIonToken } from "@/lib/ion";
 import styles from "./CesiumViewer.module.css";
 
@@ -143,13 +143,15 @@ export default function CesiumViewer() {
       const layer = NOAA_LAYERS.find((candidate) => candidate.id === layerId);
       if (!layer) return;
 
-      const time = latestTimestamp(layer.cadence);
       noaaLayerRef.current = viewer.imageryLayers.addImageryProvider(
-        createNoaaImageryProvider(layer, time),
+        ignoreMissingTiles(createNoaaImageryProvider(layer)),
       );
       setActiveNoaaId(layerId);
 
-      log(`${layer.label} — frame ${time}`);
+      log(
+        `${layer.label} — latest available frame ` +
+          `(${layer.cadence === "daily" ? "new once a day" : "new every 10 minutes"})`,
+      );
       log(layer.description);
 
       viewer.camera.flyTo({

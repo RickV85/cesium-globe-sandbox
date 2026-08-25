@@ -4,7 +4,7 @@ import {
   NOAA_LAYERS,
   createNoaaImageryProvider,
   createNoaaRadarProvider,
-  latestTimestamp,
+  ignoreMissingTiles,
 } from "@/lib/noaa";
 
 /**
@@ -23,17 +23,25 @@ export const noaaLesson: Lesson = {
   summary:
     "Drape NOAA-20's daily global mosaic over the globe, overlay GOES-East's 10-minute geostationary view of the Americas, and add live weather radar on top.",
   snippet: `// NOAA products are plain WMTS tiles served by NASA GIBS.
+// Use the EPSG:3857 endpoint: its GoogleMapsCompatible grid matches Cesium's
+// WebMercatorTilingScheme exactly. The EPSG:4326 grid does NOT line up with
+// GeographicTilingScheme at any level, and silently fetches the wrong tiles.
+// "default" in the time slot means "the latest frame you have".
 const provider = new Cesium.WebMapTileServiceImageryProvider({
-  url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/GOES-East_ABI_GeoColor" +
-       "/default/2026-08-19T19:50:00Z/1km/{TileMatrix}/{TileRow}/{TileCol}.png",
+  url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/GOES-East_ABI_GeoColor" +
+       "/default/default/GoogleMapsCompatible_Level7" +
+       "/{TileMatrix}/{TileRow}/{TileCol}.png",
   layer: "GOES-East_ABI_GeoColor",
   style: "default",
   format: "image/png",
-  tileMatrixSetID: "1km",
+  tileMatrixSetID: "GoogleMapsCompatible_Level7",
   maximumLevel: 6,
-  tileWidth: 512,          // GIBS uses 512px tiles, not Cesium's default 256
-  tileHeight: 512,
-  tilingScheme: new Cesium.GeographicTilingScheme(),
+  tileWidth: 256,
+  tileHeight: 256,
+  tilingScheme: new Cesium.WebMercatorTilingScheme(),
+  // GOES only sees its own disk. Without this, Cesium requests tiles
+  // outside it and GIBS answers 400 TileOutOfRange.
+  rectangle: Cesium.Rectangle.fromDegrees(-151.9, -32, 56.2, 84),
 });
 
 viewer.imageryLayers.addImageryProvider(provider);
@@ -50,18 +58,19 @@ viewer.imageryLayers.addImageryProvider(
     const goes = NOAA_LAYERS.find((l) => l.id === "goes-east-geocolor")!;
 
     // 1. Global daily mosaic from NOAA-20's VIIRS instrument.
-    const viirsTime = latestTimestamp(viirs.cadence);
-    viewer.imageryLayers.addImageryProvider(createNoaaImageryProvider(viirs, viirsTime));
-    log(`VIIRS (NOAA-20) true colour added for ${viirsTime} -- covers the whole globe.`);
+    viewer.imageryLayers.addImageryProvider(
+      ignoreMissingTiles(createNoaaImageryProvider(viirs)),
+    );
+    log("VIIRS (NOAA-20) true colour added -- latest daily mosaic, covers the whole globe.");
 
-    // 2. GOES-East on top. Only covers its own disk, so it will be transparent
-    //    over Asia and most of Europe. That is the geostationary trade-off.
-    const goesTime = latestTimestamp(goes.cadence);
+    // 2. GOES-East on top. Clipped to its own disk via NoaaLayer.extent, so it
+    //    simply stops over the Atlantic instead of requesting tiles GIBS
+    //    refuses. That is the geostationary trade-off, made explicit.
     const goesLayer = viewer.imageryLayers.addImageryProvider(
-      createNoaaImageryProvider(goes, goesTime),
+      ignoreMissingTiles(createNoaaImageryProvider(goes)),
     );
     goesLayer.alpha = 0.92;
-    log(`GOES-East GeoColor added for ${goesTime} UTC -- refreshes every 10 minutes.`);
+    log("GOES-East GeoColor added -- latest frame, refreshes every 10 minutes.");
     log("GOES is geostationary: it only sees the Americas. Spin the globe to see it end.");
 
     // 3. NOAA's live radar mosaic, US only.

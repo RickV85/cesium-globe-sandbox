@@ -63,21 +63,40 @@ through NASA's GIBS service with open CORS headers, so Cesium reads them with th
 `WebMapTileServiceImageryProvider` — no custom tile code and no API key.
 
 - **GOES-East / GOES-West** — NOAA's geostationary satellites. A new frame every 10 minutes, so
-  you see live cloud motion. They only cover their own disk, so the far side of the globe stays
-  empty. GeoColor (true colour by day, IR at night) and Band 13 clean infrared are included.
+  you see live cloud motion. They only cover their own disk, so the far side of the globe has no
+  data. GeoColor (true colour by day, IR at night) and Band 13 clean infrared are included.
 - **VIIRS on NOAA-20** — a polar orbiter that images the entire planet once per day. Included as
   a global true-colour daily mosaic and as the Day/Night Band ("Earth at night").
 - **Weather radar** — NOAA's own ArcGIS service (MRMS base reflectivity, CONUS). This one is a
   *dynamic* map service rather than pre-cut tiles, so Cesium renders each image on demand.
 
-Two details that catch people out, both handled in `createNoaaImageryProvider`:
+### Three things that will bite you
 
-- GIBS serves **512×512** tiles, not Cesium's default 256.
-- Products publish with a lag, so requesting "now" returns empty tiles. `latestTimestamp()`
-  steps back 30 minutes for the geostationary feeds and uses yesterday (UTC) for daily mosaics.
+**Use the EPSG:3857 endpoint, not EPSG:4326.** GIBS publishes both, and the 4326 grid looks like
+the obvious choice for a globe. It is a trap. Its tile pyramid is 288° wide at level 0 and halves
+from there (288, 144, 72, 36, 18…), while Cesium's `GeographicTilingScheme` is a quadtree starting
+at 180° (180, 90, 45, 22.5, 11.25…). The ratio is 288/180 = 1.6 — not a power of two — so the two
+grids never line up at *any* zoom level. Point Cesium at the 4326 endpoint and it silently fetches
+tiles for the wrong part of the world, then throws `400 TileOutOfRange` once its column index runs
+past GIBS's narrower matrix. The 3857 endpoint uses GoogleMapsCompatible grids — one 256px tile at
+level 0, doubling each level — which is exactly `WebMercatorTilingScheme`.
 
-The NOAA buttons below the lessons stay live whichever lesson is loaded — click one to swap the
-product, click it again to remove it.
+**Do not compute the timestamp from the clock.** GIBS publishes the geostationary feeds with a
+variable lag, often over an hour. A guessed "now minus 30 minutes" lands on a frame that does not
+exist yet and every tile 404s. Pass the literal string `"default"` for the latest frame it
+actually has. Daily mosaics need the opposite treatment: `"default"` resolves to *today*, which is
+still being filled in as the satellite completes its orbits and is mostly empty — use yesterday
+(UTC) for the most recent complete one. Both cases are handled by `frameFor()`.
+
+**Clip partial-coverage layers with `rectangle`.** The GOES layers only cover their own disk, and
+GIBS answers requests outside it with `400 TileOutOfRange` rather than a blank tile. The boxes in
+`NoaaLayer.extent` come from the per-level `TileMatrixSetLimits` in the GIBS capabilities document.
+A rectangle cannot describe a circle, so a few tiles at the corners of the disk still 404 — that is
+a genuine data gap, and `ignoreMissingTiles()` stops Cesium retrying and flooding the console.
+
+A note on reading the errors: a GIBS 404 shows up in Chrome as a **CORS** failure, because GIBS
+error responses carry no `Access-Control-Allow-Origin` header. The CORS message is a symptom, not
+the cause — check the status code before chasing it.
 
 ## How Cesium is wired into Next.js
 
@@ -107,6 +126,9 @@ at runtime rather than bundling them.
   thousands of km out, staring at empty sky.
 - **Long polylines need `arcType: Cesium.ArcType.GEODESIC`**, or they cut straight through the
   planet instead of following the surface.
+- **A tile service's grid must match the tiling scheme you hand Cesium.** If imagery loads but
+  looks subtly wrong, or stops dead along a meridian, suspect the grid before anything else — see
+  the EPSG:3857 note above.
 
 ## Scripts
 
