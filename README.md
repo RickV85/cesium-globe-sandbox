@@ -1,139 +1,120 @@
-# Cesium globe sandbox
+# GOES-19 lightning
 
-A small Next.js app for getting familiar with [CesiumJS](https://cesium.com/platform/cesiumjs/),
-the 3D globe library. It is a set of short, self-contained lessons that each reset the globe and
-run a commented block of **raw CesiumJS** — the same API the official docs and
-[Sandcastle](https://sandcastle.cesium.com/) examples use, so tutorial code pastes in directly.
+A Next.js app that replays GLM lightning flash detections from NOAA's GOES-19 satellite on a
+CesiumJS globe. Flashes are ingested from raw NetCDF into Postgres/PostGIS, served by route
+handlers in this app, and animated against the Cesium clock.
 
-Lesson 7 drapes **live NOAA satellite imagery** over the globe.
+Currently loaded: **2026-08-01**, Northern Rockies (lat 41–49, lon −117 to −105) — 187 flashes
+between 00:00:03Z and 04:03:33Z. One evening thunderstorm; 19 of the 24 hours are empty.
 
-## Getting started
+## Running it
 
 ```bash
 npm install
 ```
 
-Add a Cesium ion token (free) to `.env.local`:
+`.env.local` needs two values:
 
 ```bash
-NEXT_PUBLIC_CESIUM_ION_TOKEN=your_token_here
+NEXT_PUBLIC_CESIUM_ION_TOKEN=   # https://ion.cesium.com/tokens
+SUPABASE_DB_URL=                # server-side only, NEVER NEXT_PUBLIC_
 ```
-
-Get one at <https://ion.cesium.com/tokens> — sign in and copy the **Default Token**. Then:
 
 ```bash
 npm run dev
 ```
 
-The app runs without a token, but on OpenStreetMap imagery with no elevation data, and lesson 3
-will tell you it is disabled. Everything else, including all the NOAA imagery, works either way.
+## How it fits together
 
-> Note: `Cesium.Ion.defaultAccessToken` is *not* a way to check whether you have a token.
-> CesiumJS ships a demo token baked into the bundle, so ion assets will quietly load on Cesium's
-> shared, rate-limited quota. This project gates on its own env var instead — see `src/lib/ion.ts`.
-
-## The lessons
-
-Each lives in its own file under `src/lessons/`, and the panel shows the essential calls next to
-the running globe.
-
-| # | Lesson | What it covers |
-|---|--------|----------------|
-| 1 | Camera & coordinates | `Cartesian3.fromDegrees`, `camera.flyTo`, heading/pitch in radians |
-| 2 | Entities | points, labels, geodesic polylines, extruded polygons |
-| 3 | Terrain | world terrain, `depthTestAgainstTerrain`, `sampleTerrainMostDetailed` (needs a token) |
-| 4 | Imagery layers | the layer stack, `alpha`/`brightness`, adding any tile service |
-| 5 | Picking | `ScreenSpaceEventHandler`, `scene.pick` vs `globe.pick` |
-| 6 | The clock | `SampledPositionProperty`, entity `availability`, `trackedEntity` |
-| 7 | NOAA satellite imagery | live GOES + VIIRS imagery and weather radar |
-
-In development the live viewer is exposed as `window.viewer`, so you can poke at the scene from
-the browser console:
-
-```js
-viewer.camera.positionCartographic
-viewer.entities.values
-viewer.imageryLayers.length
+```
+~/GOES/files/            ingest (Python)      backfill.py + migrations/
+        |                                     goes2go -> xarray -> Postgres
+        v
+Supabase Postgres/PostGIS   flashes(flash_time, geom, energy_j, area_km2, ...)
+        |
+        v
+src/lib/db.ts            postgres.js client, server-only
+src/lib/flashes.ts       the two queries
+src/app/api/*/route.ts   GET /api/flashes, GET /api/bounds
+        |
+        v
+src/components/          LightningApp (table + controls) -> LightningGlobe (Cesium)
 ```
 
-## The NOAA data
+### API
 
-Defined in `src/lib/noaa.ts`. NOAA's satellite products are published as ordinary WMTS tiles
-through NASA's GIBS service with open CORS headers, so Cesium reads them with the built-in
-`WebMapTileServiceImageryProvider` — no custom tile code and no API key.
+`GET /api/bounds` → `{earliest, latest, count}`. The UI opens on this, because a picker
+defaulting to "the whole day" would land on 19 empty hours.
 
-- **GOES-East / GOES-West** — NOAA's geostationary satellites. A new frame every 10 minutes, so
-  you see live cloud motion. They only cover their own disk, so the far side of the globe has no
-  data. GeoColor (true colour by day, IR at night) and Band 13 clean infrared are included.
-- **VIIRS on NOAA-20** — a polar orbiter that images the entire planet once per day. Included as
-  a global true-colour daily mosaic and as the Day/Night Band ("Earth at night").
-- **Weather radar** — NOAA's own ArcGIS service (MRMS base reflectivity, CONUS). This one is a
-  *dynamic* map service rather than pre-cut tiles, so Cesium renders each image on demand.
+`GET /api/flashes?start=&end=&limit=` → `{start, end, count, truncated, flashes[]}`, each flash
+`{t, lon, lat, energy_j, area_km2, quality_flag, flash_id}`. Both params default to the full
+extent. One endpoint feeds both the table and the globe — there is deliberately no separate
+"map data" route.
 
-### Three things that will bite you
+### The globe
 
-**Use the EPSG:3857 endpoint, not EPSG:4326.** GIBS publishes both, and the 4326 grid looks like
-the obvious choice for a globe. It is a trap. Its tile pyramid is 288° wide at level 0 and halves
-from there (288, 144, 72, 36, 18…), while Cesium's `GeographicTilingScheme` is a quadtree starting
-at 180° (180, 90, 45, 22.5, 11.25…). The ratio is 288/180 = 1.6 — not a power of two — so the two
-grids never line up at *any* zoom level. Point Cesium at the 4326 endpoint and it silently fetches
-tiles for the wrong part of the world, then throws `400 TileOutOfRange` once its column index runs
-past GIBS's narrower matrix. The 3857 endpoint uses GoogleMapsCompatible grids — one 256px tile at
-level 0, doubling each level — which is exactly `WebMercatorTilingScheme`.
+**All at once** adds every flash as an entity with no `availability`, so the clock is ignored and
+everything stays on screen. **Playback** gives each entity a `TimeIntervalCollection` running from
+its own timestamp for the chosen trail length, so the Cesium clock reveals the storm as it
+happened. Speed and trail are both adjustable; the dial and timeline at the bottom scrub it.
 
-**Do not compute the timestamp from the clock.** GIBS publishes the geostationary feeds with a
-variable lag, often over an hour. A guessed "now minus 30 minutes" lands on a frame that does not
-exist yet and every tile 404s. Pass the literal string `"default"` for the latest frame it
-actually has. Daily mosaics need the opposite treatment: `"default"` resolves to *today*, which is
-still being filled in as the satellite completes its orbits and is mostly empty — use yesterday
-(UTC) for the most recent complete one. Both cases are handled by `frameFor()`.
+Clicking a table row flies the camera there and, in playback, jumps the clock to that instant
+**and pauses** — without the pause a 300-data-second trail at 300× is lit for about one wall
+second and vanishes before you can look at it. Clicking a flash on the globe does the reverse:
+it highlights and scrolls to the row, but deliberately does not move the camera.
 
-**Clip partial-coverage layers with `rectangle`.** The GOES layers only cover their own disk, and
-GIBS answers requests outside it with `400 TileOutOfRange` rather than a blank tile. The boxes in
-`NoaaLayer.extent` come from the per-level `TileMatrixSetLimits` in the GIBS capabilities document.
-A rectangle cannot describe a circle, so a few tiles at the corners of the disk still 404 — that is
-a genuine data gap, and `ignoreMissingTiles()` stops Cesium retrying and flooding the console.
+Colour runs a log scale over flash energy (~1e-15 to 1e-12 J — linear would put nearly everything
+at the bottom), and point size follows √area.
 
-A note on reading the errors: a GIBS 404 shows up in Chrome as a **CORS** failure, because GIBS
-error responses carry no `Access-Control-Allow-Origin` header. The CORS message is a symptom, not
-the cause — check the status code before chasing it.
+## Things worth knowing
 
-## How Cesium is wired into Next.js
+**`_Unsigned` in GLM files.** Flash times, ids, energies and areas are stored as `int16` but carry
+`_Unsigned = "true"`, so the bits must be read as `uint16`. Over half the time values in a typical
+file are negative when read signed. xarray honours the attribute; **h5py does not**, and silently
+yields times wrong by 65536 × scale_factor = 25.000385 s. This cost real debugging time.
 
-Cesium is not a normal npm dependency: it fetches Workers, Assets, Widgets and ThirdParty files
-at runtime rather than bundling them.
+**`flash_area` is in m², not km².** `units = "m2"`, `scale_factor ≈ 152601.86`. Correct values
+land at 70–770 km².
 
-- `scripts/copy-cesium-assets.mjs` copies those four directories into `public/cesium`. It runs
-  from the `predev` and `prebuild` hooks. Next 16 uses Turbopack, which does not run webpack
-  plugins, so `copy-webpack-plugin` is not an option here.
-- `src/app/layout.tsx` sets `window.CESIUM_BASE_URL` with a `beforeInteractive` script, which
-  guarantees it lands before any Cesium module is evaluated.
-- `src/app/page.tsx` loads the viewer with `ssr: false` — Cesium touches `window` on import and
-  can never render on the server.
-- `public/cesium` is generated, so it is gitignored and excluded from linting.
+**Timestamps are formatted in SQL.** Drivers map `timestamptz` to a JS `Date`, which holds
+milliseconds; GLM resolves to microseconds and two flashes in the same millisecond are common.
+`to_char(... 'US')` keeps the precision as text.
 
-## Gotchas worth knowing
+**TLS to Supabase.** postgres.js follows libpq semantics, where `require` encrypts without
+verifying — which is what Supabase's pooler needs, since its chain is not in Node's trust store.
+Set `PGSSLROOTCERT` to Supabase's CA bundle for real verification before deploying. (`pg` treats
+`require` as `verify-full` and fails with `SELF_SIGNED_CERT_IN_CHAIN`.)
 
-- **Never call `scene.primitives.removeAll()`** to clear a scene. The Viewer's own
-  `DataSourceDisplay` keeps its `PrimitiveCollection` there, and `removeAll()` destroys it, which
-  breaks entity rendering. Use `viewer.entities.removeAll()` and `viewer.dataSources.removeAll()`
-  instead — see `src/lessons/scene.ts`.
-- **Give the container a definite height.** In a CSS grid, an `auto` row leaves `height: 100%`
-  with nothing to resolve against and Cesium's canvas collapses to a few pixels. `src/components/CesiumViewer.module.css`
-  sets an explicit `grid-template-rows`.
-- **Set the opening camera view yourself.** Cesium derives its default from the canvas aspect
-  ratio at construction time; if the stylesheet lands a beat later, the camera ends up hundreds of
-  thousands of km out, staring at empty sky.
-- **Long polylines need `arcType: Cesium.ArcType.GEODESIC`**, or they cut straight through the
-  planet instead of following the surface.
-- **A tile service's grid must match the tiling scheme you hand Cesium.** If imagery loads but
-  looks subtly wrong, or stops dead along a meridian, suspect the grid before anything else — see
-  the EPSG:3857 note above.
+**The DB client is cached on `globalThis`** so it survives hot reload — which means edits to
+`src/lib/db.ts` need a dev server *restart*, not just a save.
+
+**Cesium in Next.** Cesium fetches Workers/Assets/Widgets at runtime rather than bundling them.
+`scripts/copy-cesium-assets.mjs` copies them into `public/cesium` from the `predev`/`prebuild`
+hooks (Turbopack does not run webpack plugins, so `copy-webpack-plugin` is not an option).
+`window.CESIUM_BASE_URL` is set by a `beforeInteractive` script in the root layout, and the globe
+is loaded with `ssr: false`.
+
+**Give the Cesium container a definite height.** In a CSS grid, an `auto` row leaves `height: 100%`
+with nothing to resolve against and the canvas collapses to a few pixels.
+
+**`src/lib/noaa.ts` is currently unused.** It holds the GIBS/NOAA imagery layer setup and is kept
+for the next step: requesting the GOES-East frame matching the playback timestamp, so the clouds
+on screen are the ones that produced each flash. It documents a real trap — GIBS's EPSG:4326 grid
+never aligns with Cesium's `GeographicTilingScheme` at any zoom, so use the EPSG:3857 endpoint.
+
+## Next
+
+- Cluster flashes into storms with `ST_ClusterDBSCAN`, with user-tunable `eps`/`minpoints`.
+  Storms stay a *query*, never a table — the parameters are the user's, so nothing can be
+  precomputed. Note DBSCAN is purely spatial, so a temporal dimension has to be added
+  (time buckets, or a rolling window partition).
+- Time-matched GOES imagery under the flashes.
+- Widen the ingest beyond a single day.
 
 ## Scripts
 
 ```bash
 npm run dev      # copy Cesium assets, then start the dev server
-npm run build    # copy Cesium assets, then production build
+npm run build
 npm run lint
 ```

@@ -1,22 +1,7 @@
 import { getSql } from "./db";
+import type { Bounds, Flash } from "./types";
 
-/** One GLM lightning flash, flattened for both the table and the globe. */
-export type Flash = {
-  /** ISO-8601 UTC, microsecond precision. */
-  t: string;
-  lon: number;
-  lat: number;
-  energy_j: number | null;
-  area_km2: number | null;
-  quality_flag: number | null;
-  flash_id: number;
-};
-
-export type Bounds = {
-  earliest: string | null;
-  latest: string | null;
-  count: number;
-};
+export type { Bounds, Flash };
 
 export const DEFAULT_SATELLITE = 19;
 export const MAX_LIMIT = 50_000;
