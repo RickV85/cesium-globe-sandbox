@@ -122,9 +122,7 @@
 }
 
 .button,
-.primary,
-.toggle,
-.toggleActive {
+.primary {
   flex: 1;
   padding: 7px 10px;
   border-radius: 6px;
@@ -135,15 +133,13 @@
     border-color 0.12s;
 }
 
-.button,
-.toggle {
+.button {
   border: 1px solid #2b333b;
   background: #171c22;
   color: #d7dee5;
 }
 
-.button:hover:not(:disabled),
-.toggle:hover {
+.button:hover:not(:disabled) {
   background: #1d242b;
   border-color: #3b464f;
 }
@@ -156,12 +152,6 @@
 
 .primary:hover:not(:disabled) {
   background: #1b3d5c;
-}
-
-.toggleActive {
-  border: 1px solid #3d7fb8;
-  background: #16324a;
-  color: #cde6fb;
 }
 
 .button:disabled,

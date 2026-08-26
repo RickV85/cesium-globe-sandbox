@@ -8,8 +8,6 @@ import { ION_TOKEN, hasIonToken } from '@/lib/ion';
 import type { Flash } from '@/lib/types';
 import styles from './LightningGlobe.module.css';
 
-export type PlaybackMode = 'all' | 'playback';
-
 /**
  * A request to point the camera at a flash.
  *
@@ -20,13 +18,6 @@ export type FocusRequest = { flash: Flash; nonce: number };
 
 type Props = {
   flashes: Flash[];
-  mode: PlaybackMode;
-  /** How long a flash stays lit, in data-seconds. */
-  trailSeconds: number;
-  /** Clock multiplier: data-seconds per wall-second. */
-  speed: number;
-  windowStart: string | null;
-  windowEnd: string | null;
   /** Camera target. Set by table clicks only, so picking on the globe does not
    *  yank the view out from under the user. */
   focus: FocusRequest | null;
@@ -60,16 +51,7 @@ function areaPixels(area: number | null): number {
   return Cesium.Math.clamp(Math.sqrt(area) * 0.8, 11, 28);
 }
 
-export default function LightningGlobe({
-  flashes,
-  mode,
-  trailSeconds,
-  speed,
-  windowStart,
-  windowEnd,
-  focus,
-  onSelect,
-}: Props) {
+export default function LightningGlobe({ flashes, focus, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const handlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
@@ -81,13 +63,6 @@ export default function LightningGlobe({
   useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
-
-  // Read inside the focus effect without becoming one of its dependencies --
-  // see the comment there.
-  const modeRef = useRef(mode);
-  useEffect(() => {
-    modeRef.current = mode;
-  }, [mode]);
 
   const homeView = useCallback((viewer: Cesium.Viewer) => {
     viewer.camera.flyTo({ destination: HOME, duration: 2.5 });
@@ -120,9 +95,8 @@ export default function LightningGlobe({
       navigationHelpButton: false,
       infoBox: false,
       selectionIndicator: true,
-      // The clock drives flash playback, so both widgets earn their place.
-      animation: true,
-      timeline: true,
+      animation: false,
+      timeline: false,
     });
 
     viewer.scene.globe.enableLighting = false;
@@ -166,7 +140,7 @@ export default function LightningGlobe({
     };
   }, []);
 
-  // --- rebuild entities when the data or presentation changes ------------
+  // --- rebuild entities when the data changes -----------------------------
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed()) return;
@@ -180,24 +154,12 @@ export default function LightningGlobe({
     byEntityId.current.clear();
 
     for (const flash of flashes) {
-      const start = Cesium.JulianDate.fromIso8601(flash.t);
       const id = `${flash.flash_id}@${flash.t}`;
       byEntityId.current.set(id, flash);
 
       entities.add({
         id,
         position: Cesium.Cartesian3.fromDegrees(flash.lon, flash.lat),
-        // In "all" mode the entity has no availability, so it ignores the
-        // clock entirely and simply stays on screen.
-        availability:
-          mode === 'playback'
-            ? new Cesium.TimeIntervalCollection([
-                new Cesium.TimeInterval({
-                  start,
-                  stop: Cesium.JulianDate.addSeconds(start, trailSeconds, new Cesium.JulianDate()),
-                }),
-              ])
-            : undefined,
         point: {
           pixelSize: areaPixels(flash.area_km2),
           color: energyColor(flash.energy_j),
@@ -210,29 +172,9 @@ export default function LightningGlobe({
     }
 
     entities.resumeEvents();
-  }, [flashes, mode, trailSeconds]);
-
-  // --- drive the clock ---------------------------------------------------
-  useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer || viewer.isDestroyed() || !windowStart || !windowEnd) return;
-
-    const start = Cesium.JulianDate.fromIso8601(windowStart);
-    const stop = Cesium.JulianDate.fromIso8601(windowEnd);
-
-    viewer.clock.startTime = start.clone();
-    viewer.clock.stopTime = stop.clone();
-    viewer.clock.currentTime = start.clone();
-    viewer.clock.clockRange = Cesium.ClockRange.LOOP_STOP;
-    viewer.clock.multiplier = speed;
-    viewer.clock.shouldAnimate = mode === 'playback';
-    viewer.timeline?.zoomTo(start, stop);
-  }, [windowStart, windowEnd, speed, mode]);
+  }, [flashes]);
 
   // --- fly to a flash selected in the table ------------------------------
-  // Depends on `focus` ALONE. Including `mode` here meant that toggling to
-  // playback re-ran this with whatever flash had last been clicked, teleporting
-  // the camera and pausing the clock the moment you pressed Playback.
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed() || !focus) return;
@@ -241,15 +183,6 @@ export default function LightningGlobe({
       destination: Cesium.Cartesian3.fromDegrees(focus.flash.lon, focus.flash.lat, 250_000),
       duration: 1.5,
     });
-
-    // In playback mode, jump the clock to the flash AND pause. Without the
-    // pause the clock keeps running at the current multiplier, so at 300x a
-    // 300-data-second trail is lit for about one wall second and the thing you
-    // just clicked on vanishes before you can look at it.
-    if (modeRef.current === 'playback') {
-      viewer.clock.currentTime = Cesium.JulianDate.fromIso8601(focus.flash.t);
-      viewer.clock.shouldAnimate = false;
-    }
   }, [focus]);
 
   return (

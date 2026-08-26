@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 
 import type { Bounds, Flash, FlashesResponse } from '@/lib/types';
-import type { FocusRequest, PlaybackMode } from './LightningGlobe';
+import type { FocusRequest } from './LightningGlobe';
 import styles from './LightningApp.module.css';
 import DateInput from './DateInput';
 import TimeInput from './TimeInput';
@@ -18,9 +18,6 @@ const LightningGlobe = dynamic(() => import('./LightningGlobe'), {
 
 /** Stable empty array: `?? []` would allocate per render and break memo deps. */
 const NO_FLASHES: Flash[] = [];
-
-const SPEEDS = [60, 150, 300, 600, 1200];
-const TRAILS = [30, 120, 300, 600];
 
 /** "2026-08-01T00:00:03.447777Z" -> "00:00:03.447" */
 function clockTime(iso: string): string {
@@ -61,11 +58,6 @@ export default function LightningApp() {
     truncated: boolean;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const [mode, setMode] = useState<PlaybackMode>('all');
-  const [speed, setSpeed] = useState(300);
-  const [trailSeconds, setTrailSeconds] = useState(300);
-
   const [selected, setSelected] = useState<Flash | null>(null);
   const [focus, setFocus] = useState<FocusRequest | null>(null);
   const nonce = useRef(0);
@@ -218,54 +210,6 @@ export default function LightningApp() {
           )}
         </section>
 
-        <section className={styles.section}>
-          <h2>Display</h2>
-          <div className={styles.buttonRow}>
-            <button
-              type="button"
-              className={mode === 'all' ? styles.toggleActive : styles.toggle}
-              onClick={() => setMode('all')}
-            >
-              All at once
-            </button>
-            <button
-              type="button"
-              className={mode === 'playback' ? styles.toggleActive : styles.toggle}
-              onClick={() => setMode('playback')}
-            >
-              Playback
-            </button>
-          </div>
-
-          {mode === 'playback' && (
-            <>
-              <label className={styles.field}>
-                <span>Speed</span>
-                <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
-                  {SPEEDS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}× real time
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={styles.field}>
-                <span>Flash lingers</span>
-                <select value={trailSeconds} onChange={(e) => setTrailSeconds(Number(e.target.value))}>
-                  {TRAILS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}s of data time
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p className={styles.hint}>
-                Use the dial and timeline at the bottom of the globe to scrub, pause and change direction.
-              </p>
-            </>
-          )}
-        </section>
-
         <section className={styles.sectionGrow}>
           <h2>
             Flashes <span className={styles.count}>{loading ? '…' : flashes.length}</span>
@@ -325,16 +269,7 @@ export default function LightningApp() {
         </section>
       </aside>
 
-      <LightningGlobe
-        flashes={flashes}
-        mode={mode}
-        trailSeconds={trailSeconds}
-        speed={speed}
-        windowStart={applied?.start ?? null}
-        windowEnd={applied?.end ?? null}
-        focus={focus}
-        onSelect={handleGlobeSelect}
-      />
+      <LightningGlobe flashes={flashes} focus={focus} onSelect={handleGlobeSelect} />
     </div>
   );
 }
