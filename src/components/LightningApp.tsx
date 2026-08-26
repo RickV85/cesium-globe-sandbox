@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 
 import { flashKey, type Bounds, type Flash, type FlashesResponse } from '@/lib/types';
@@ -19,6 +19,8 @@ const LightningGlobe = dynamic(() => import('./LightningGlobe'), {
 /** Stable empty array: `?? []` would allocate per render and break memo deps. */
 const NO_FLASHES: Flash[] = [];
 
+const INITIAL_TIME_STATE = { start: '00:00', end: '23:59' };
+
 /** "2026-08-01T00:00:03.447777Z" -> "00:00:03.447" */
 function clockTime(iso: string): string {
   return iso.slice(11, 23);
@@ -36,13 +38,28 @@ export type DateInputState = { start: DateValue; end: DateValue };
 export type TimeValue = string;
 export type TimeInputState = { start: TimeValue; end: TimeValue };
 
+/**
+ * One ISO-8601 UTC instant from a date and a time input, or null if either is
+ * still empty. Both controls constrain their own format, so the only thing
+ * worth checking is that they have been filled in. `type="time"` yields
+ * "HH:MM", or "HH:MM:SS" when its step is under a minute.
+ */
+const toIsoUtc = (date: DateValue, time: TimeValue): string | null =>
+  date && time ? `${date}T${time.length === 5 ? `${time}:00` : time}Z` : null;
+
+const getBrowserTzOffset = () => {
+  const tzOffsetInHours = new Date().getTimezoneOffset() / 60;
+  if (Number.isNaN(tzOffsetInHours)) return 'unknown';
+  return `${tzOffsetInHours} hours`;
+};
+
 export default function LightningApp() {
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [dateInputState, setDateInputState] = useState<DateInputState>({
     start: '',
     end: '',
   });
-  const [timeInputState, setTimeInputState] = useState({ start: '00:00', end: '23:59' });
+  const [timeInputState, setTimeInputState] = useState(INITIAL_TIME_STATE);
   const [applied, setApplied] = useState<{ start: string; end: string } | null>(null);
 
   /**
@@ -83,7 +100,6 @@ export default function LightningApp() {
           // `end` is exclusive, so nudge past the final flash to include it.
           const end = new Date(Date.parse(data.latest) + 1000).toISOString();
           setFormattedDateState({ start: data.earliest, end: data.latest });
-          console.log({data})
           //  will need a seperate time state and set here
           setApplied({ start: data.earliest, end });
         }
@@ -129,23 +145,27 @@ export default function LightningApp() {
   const loading = error === null && (bounds === null || (windowKey !== null && fresh === null));
 
   const apply = useCallback(() => {
-    if (Number.isNaN(Date.parse(dateInputState.start)) || Number.isNaN(Date.parse(dateInputState.end))) {
-      setError('Both times must be valid ISO-8601, e.g. 2026-08-01T00:00:00Z');
+    const start = toIsoUtc(dateInputState.start, timeInputState.start);
+    const end = toIsoUtc(dateInputState.end, timeInputState.end);
+
+    if (!start || !end) {
+      setError('Pick a date and a time for both ends of the window.');
       return;
     }
-    if (Date.parse(dateInputState.end) <= Date.parse(dateInputState.start)) {
+    // Fixed-width ISO UTC, so string order is chronological order.
+    if (end <= start) {
       setError('End must be after start.');
       return;
     }
     setError(null);
-    setApplied({ start: dateInputState.start, end: dateInputState.end });
-  }, [dateInputState.start, dateInputState.end]);
+    setApplied({ start, end });
+  }, [dateInputState, timeInputState]);
 
   const resetWindow = useCallback(() => {
     if (!bounds?.earliest || !bounds.latest) return;
     const end = new Date(Date.parse(bounds.latest) + 1000).toISOString();
     setFormattedDateState({ start: bounds.earliest, end: bounds.latest });
-    // will need a time set here
+    setTimeInputState(INITIAL_TIME_STATE);
     setApplied({ start: bounds.earliest, end });
   }, [bounds]);
 
@@ -159,21 +179,19 @@ export default function LightningApp() {
   const handleGlobeSelect = useCallback((flash: Flash | null) => {
     setSelected(flash);
     if (flash) {
-      rowRefs.current
-        .get(flashKey(flash))
-        ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      rowRefs.current.get(flashKey(flash))?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
   }, []);
 
-  const summary = useMemo(() => {
-    if (!flashes.length) return null;
-    const energies = flashes.map((f) => f.energy_j ?? 0).filter(Boolean);
-    return {
-      first: flashes[0].flash_time,
-      last: flashes[flashes.length - 1].flash_time,
-      peak: energies.length ? Math.max(...energies) : null,
-    };
-  }, [flashes]);
+  // const summary = useMemo(() => {
+  //   if (!flashes.length) return null;
+  //   const energies = flashes.map((f) => f.energy_j ?? 0).filter(Boolean);
+  //   return {
+  //     first: flashes[0].flash_time,
+  //     last: flashes[flashes.length - 1].flash_time,
+  //     peak: energies.length ? Math.max(...energies) : null,
+  //   };
+  // }, [flashes]);
 
   return (
     <div className={styles.shell}>
@@ -191,6 +209,7 @@ export default function LightningApp() {
             min={bounds?.earliest ? formatToDateString(bounds.earliest) : ''}
             max={bounds?.latest ? formatToDateString(bounds.latest) : ''}
           />
+          <p>{`Your browser's TZ offset from UTC is ${getBrowserTzOffset()}.`}</p>
           <TimeInput value={timeInputState} onChange={setTimeInputState} />
           <div className={styles.buttonRow}>
             <button type="button" className={styles.primary} onClick={apply} disabled={loading}>
@@ -214,12 +233,12 @@ export default function LightningApp() {
           </h2>
           {error && <p className={styles.error}>{error}</p>}
           {truncated && <p className={styles.warning}>Result hit the row limit — narrow the window.</p>}
-          {summary && (
+          {/* {summary && (
             <p className={styles.hint}>
               {clockTime(summary.first)} – {clockTime(summary.last)}
               {summary.peak ? `, peak ${summary.peak.toExponential(2)} J` : ''}
             </p>
-          )}
+          )} */}
 
           <div className={styles.tableWrap}>
             <table className={styles.table}>
