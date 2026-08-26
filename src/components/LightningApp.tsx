@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 
-import type { Bounds, Flash, FlashesResponse } from '@/lib/types';
+import { flashKey, type Bounds, type Flash, type FlashesResponse } from '@/lib/types';
 import type { FocusRequest } from './LightningGlobe';
 import styles from './LightningApp.module.css';
 import DateInput from './DateInput';
@@ -63,8 +63,6 @@ export default function LightningApp() {
   const nonce = useRef(0);
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
-  const keyOf = (f: Flash) => `${f.flash_id}@${f.t}`;
-
   const setFormattedDateState = ({ start, end }: { start: string; end: string }): void =>
     setDateInputState({
       start: formatToDateString(start),
@@ -85,6 +83,7 @@ export default function LightningApp() {
           // `end` is exclusive, so nudge past the final flash to include it.
           const end = new Date(Date.parse(data.latest) + 1000).toISOString();
           setFormattedDateState({ start: data.earliest, end: data.latest });
+          console.log({data})
           //  will need a seperate time state and set here
           setApplied({ start: data.earliest, end });
         }
@@ -161,8 +160,8 @@ export default function LightningApp() {
     setSelected(flash);
     if (flash) {
       rowRefs.current
-        .get(`${flash.flash_id}@${flash.t}`)
-        ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        .get(flashKey(flash))
+        ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
   }, []);
 
@@ -170,8 +169,8 @@ export default function LightningApp() {
     if (!flashes.length) return null;
     const energies = flashes.map((f) => f.energy_j ?? 0).filter(Boolean);
     return {
-      first: flashes[0].t,
-      last: flashes[flashes.length - 1].t,
+      first: flashes[0].flash_time,
+      last: flashes[flashes.length - 1].flash_time,
       peak: energies.length ? Math.max(...energies) : null,
     };
   }, [flashes]);
@@ -235,8 +234,8 @@ export default function LightningApp() {
               </thead>
               <tbody>
                 {flashes.map((flash) => {
-                  const key = keyOf(flash);
-                  const isSelected = selected !== null && keyOf(selected) === key;
+                  const key = flashKey(flash);
+                  const isSelected = selected !== null && flashKey(selected) === key;
                   return (
                     <tr
                       key={key}
@@ -247,7 +246,7 @@ export default function LightningApp() {
                       className={isSelected ? styles.rowSelected : undefined}
                       onClick={() => focusFlash(flash)}
                     >
-                      <td>{clockTime(flash.t)}</td>
+                      <td>{clockTime(flash.flash_time)}</td>
                       <td>{flash.lat.toFixed(3)}</td>
                       <td>{flash.lon.toFixed(3)}</td>
                       <td>{formatEnergy(flash.energy_j)}</td>

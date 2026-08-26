@@ -10,7 +10,7 @@
 /** One GLM lightning flash. */
 export type Flash = {
   /** ISO-8601 UTC, microsecond precision. */
-  t: string;
+  flash_time: string;
   lon: number;
   lat: number;
   energy_j: number | null;
@@ -18,6 +18,14 @@ export type Flash = {
   quality_flag: number | null;
   flash_id: number;
 };
+
+/**
+ * Stable identity for a flash: the Cesium entity id and the table row key are
+ * the same string, which is what lets a globe pick find its row and a row
+ * click find its pin. Both sides must derive it here -- rebuilding the format
+ * by hand anywhere means a pick silently stops matching.
+ */
+export const flashKey = (f: Flash) => `${f.flash_id}@${f.flash_time}`;
 
 /** GET /api/bounds */
 export type Bounds = {

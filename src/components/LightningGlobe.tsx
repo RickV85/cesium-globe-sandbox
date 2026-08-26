@@ -5,7 +5,7 @@ import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 
 import { ION_TOKEN, hasIonToken } from '@/lib/ion';
-import type { Flash } from '@/lib/types';
+import { flashKey, type Flash } from '@/lib/types';
 import styles from './LightningGlobe.module.css';
 
 /**
@@ -151,7 +151,7 @@ export default function LightningGlobe({ flashes, focus, onSelect }: Props) {
     byEntityId.current.clear();
 
     for (const flash of flashes) {
-      const id = `${flash.flash_id}@${flash.t}`;
+      const id = flashKey(flash);
       byEntityId.current.set(id, flash);
 
       entities.add({
@@ -175,6 +175,9 @@ export default function LightningGlobe({ flashes, focus, onSelect }: Props) {
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed() || !focus) return;
+
+    // set the selected entity to show selected box on globe
+    viewer.selectedEntity = viewer.entities.getById(flashKey(focus.flash));
 
     viewer.camera.flyTo({
       destination: Cesium.Cartesian3.fromDegrees(focus.flash.lon, focus.flash.lat, 25000),

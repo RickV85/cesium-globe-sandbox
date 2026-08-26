@@ -30,7 +30,7 @@ export async function queryFlashes(opts: {
 
   return sql<Flash[]>`
     select
-        to_char(flash_time at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as t,
+        to_char(flash_time at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as flash_time,
         st_x(geom)::float8 as lon,
         st_y(geom)::float8 as lat,
         energy_j,
