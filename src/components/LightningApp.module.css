@@ -90,8 +90,8 @@
   padding: 6px 8px;
   border: 1px solid #2b333b;
   border-radius: 5px;
-  background: #0b0e11;
-  color: #d7dee5;
+  /* background: #0b0e11; */
+  /* color: #d7dee5; */
   font: 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
   min-width: 0;
 }

@@ -1,15 +1,16 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 
-import type { Bounds, Flash, FlashesResponse } from "@/lib/types";
-import type { FocusRequest, PlaybackMode } from "./LightningGlobe";
-import styles from "./LightningApp.module.css";
+import type { Bounds, Flash, FlashesResponse } from '@/lib/types';
+import type { FocusRequest, PlaybackMode } from './LightningGlobe';
+import styles from './LightningApp.module.css';
+import DateInput from './DateInput';
 
 // Cesium touches `window` on import, so the globe can never render on the
 // server. Everything else on this page is happy to.
-const LightningGlobe = dynamic(() => import("./LightningGlobe"), {
+const LightningGlobe = dynamic(() => import('./LightningGlobe'), {
   ssr: false,
   loading: () => <div className={styles.globeLoading}>Loading globe…</div>,
 });
@@ -26,13 +27,21 @@ function clockTime(iso: string): string {
 }
 
 function formatEnergy(j: number | null): string {
-  return j === null ? "—" : j.toExponential(2);
+  return j === null ? '—' : j.toExponential(2);
 }
+
+export const formatToDateString = (dateTimeString: string) =>
+  new Date(dateTimeString).toLocaleDateString('fr-CA', { timeZone: 'UTC' });
+
+export type DateValue = string;
+export type DateInputState = { start: DateValue; end: DateValue };
 
 export default function LightningApp() {
   const [bounds, setBounds] = useState<Bounds | null>(null);
-  const [startInput, setStartInput] = useState("");
-  const [endInput, setEndInput] = useState("");
+  const [dateInputState, setDateInputState] = useState<DateInputState>({
+    start: '',
+    end: '',
+  });
   const [applied, setApplied] = useState<{ start: string; end: string } | null>(null);
 
   /**
@@ -49,7 +58,7 @@ export default function LightningApp() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [mode, setMode] = useState<PlaybackMode>("all");
+  const [mode, setMode] = useState<PlaybackMode>('all');
   const [speed, setSpeed] = useState(300);
   const [trailSeconds, setTrailSeconds] = useState(300);
 
@@ -60,12 +69,18 @@ export default function LightningApp() {
 
   const keyOf = (f: Flash) => `${f.flash_id}@${f.t}`;
 
+  const setFormattedDateState = ({ start, end }: { start: string; end: string }): void =>
+    setDateInputState({
+      start: formatToDateString(start),
+      end: formatToDateString(end),
+    });
+
   // Discover the window the data actually covers, and open on it.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const response = await fetch("/api/bounds");
+        const response = await fetch('/api/bounds');
         if (!response.ok) throw new Error(`bounds returned ${response.status}`);
         const data: Bounds = await response.json();
         if (cancelled) return;
@@ -73,8 +88,9 @@ export default function LightningApp() {
         if (data.earliest && data.latest) {
           // `end` is exclusive, so nudge past the final flash to include it.
           const end = new Date(Date.parse(data.latest) + 1000).toISOString();
-          setStartInput(data.earliest);
-          setEndInput(end);
+          console.log({ end });
+          setFormattedDateState({ start: data.earliest, end: data.latest });
+          //  will need a seperate time state and set here
           setApplied({ start: data.earliest, end });
         }
       } catch (cause) {
@@ -116,27 +132,26 @@ export default function LightningApp() {
   const fresh = result?.key === windowKey ? result : null;
   const flashes = fresh?.flashes ?? NO_FLASHES;
   const truncated = fresh?.truncated ?? false;
-  const loading =
-    error === null && (bounds === null || (windowKey !== null && fresh === null));
+  const loading = error === null && (bounds === null || (windowKey !== null && fresh === null));
 
   const apply = useCallback(() => {
-    if (Number.isNaN(Date.parse(startInput)) || Number.isNaN(Date.parse(endInput))) {
-      setError("Both times must be valid ISO-8601, e.g. 2026-08-01T00:00:00Z");
+    if (Number.isNaN(Date.parse(dateInputState.start)) || Number.isNaN(Date.parse(dateInputState.end))) {
+      setError('Both times must be valid ISO-8601, e.g. 2026-08-01T00:00:00Z');
       return;
     }
-    if (Date.parse(endInput) <= Date.parse(startInput)) {
-      setError("End must be after start.");
+    if (Date.parse(dateInputState.end) <= Date.parse(dateInputState.start)) {
+      setError('End must be after start.');
       return;
     }
     setError(null);
-    setApplied({ start: startInput, end: endInput });
-  }, [startInput, endInput]);
+    setApplied({ start: dateInputState.start, end: dateInputState.end });
+  }, [dateInputState.start, dateInputState.end]);
 
   const resetWindow = useCallback(() => {
     if (!bounds?.earliest || !bounds.latest) return;
     const end = new Date(Date.parse(bounds.latest) + 1000).toISOString();
-    setStartInput(bounds.earliest);
-    setEndInput(end);
+    setFormattedDateState({ start: bounds.earliest, end: bounds.latest });
+    // will need a time set here
     setApplied({ start: bounds.earliest, end });
   }, [bounds]);
 
@@ -152,7 +167,7 @@ export default function LightningApp() {
     if (flash) {
       rowRefs.current
         .get(`${flash.flash_id}@${flash.t}`)
-        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   }, []);
 
@@ -172,21 +187,19 @@ export default function LightningApp() {
         <header className={styles.header}>
           <h1>GOES-19 lightning</h1>
           <p>
-            GLM flash detections over the Northern Rockies, served from Postgres and replayed
-            against the Cesium clock.
+            GLM flash detections over the Northern Rockies, served from Postgres and replayed against the
+            Cesium clock.
           </p>
         </header>
 
         <section className={styles.section}>
           <h2>Time window (UTC)</h2>
-          <label className={styles.field}>
-            <span>Start</span>
-            <input value={startInput} onChange={(e) => setStartInput(e.target.value)} spellCheck={false} />
-          </label>
-          <label className={styles.field}>
-            <span>End</span>
-            <input value={endInput} onChange={(e) => setEndInput(e.target.value)} spellCheck={false} />
-          </label>
+          <DateInput
+            value={dateInputState}
+            onChange={setFormattedDateState}
+            min={bounds?.earliest ? formatToDateString(bounds.earliest) : ''}
+            max={bounds?.latest ? formatToDateString(bounds.latest) : ''}
+          />
           <div className={styles.buttonRow}>
             <button type="button" className={styles.primary} onClick={apply} disabled={loading}>
               Apply
@@ -197,8 +210,8 @@ export default function LightningApp() {
           </div>
           {bounds?.earliest && (
             <p className={styles.hint}>
-              Dataset holds {bounds.count} flashes, {clockTime(bounds.earliest)} –{" "}
-              {clockTime(bounds.latest!)} on {bounds.earliest.slice(0, 10)}.
+              Dataset holds {bounds.count} flashes, {clockTime(bounds.earliest)} – {clockTime(bounds.latest!)}{' '}
+              on {bounds.earliest.slice(0, 10)}.
             </p>
           )}
         </section>
@@ -208,21 +221,21 @@ export default function LightningApp() {
           <div className={styles.buttonRow}>
             <button
               type="button"
-              className={mode === "all" ? styles.toggleActive : styles.toggle}
-              onClick={() => setMode("all")}
+              className={mode === 'all' ? styles.toggleActive : styles.toggle}
+              onClick={() => setMode('all')}
             >
               All at once
             </button>
             <button
               type="button"
-              className={mode === "playback" ? styles.toggleActive : styles.toggle}
-              onClick={() => setMode("playback")}
+              className={mode === 'playback' ? styles.toggleActive : styles.toggle}
+              onClick={() => setMode('playback')}
             >
               Playback
             </button>
           </div>
 
-          {mode === "playback" && (
+          {mode === 'playback' && (
             <>
               <label className={styles.field}>
                 <span>Speed</span>
@@ -236,10 +249,7 @@ export default function LightningApp() {
               </label>
               <label className={styles.field}>
                 <span>Flash lingers</span>
-                <select
-                  value={trailSeconds}
-                  onChange={(e) => setTrailSeconds(Number(e.target.value))}
-                >
+                <select value={trailSeconds} onChange={(e) => setTrailSeconds(Number(e.target.value))}>
                   {TRAILS.map((s) => (
                     <option key={s} value={s}>
                       {s}s of data time
@@ -248,8 +258,7 @@ export default function LightningApp() {
                 </select>
               </label>
               <p className={styles.hint}>
-                Use the dial and timeline at the bottom of the globe to scrub, pause and change
-                direction.
+                Use the dial and timeline at the bottom of the globe to scrub, pause and change direction.
               </p>
             </>
           )}
@@ -257,14 +266,14 @@ export default function LightningApp() {
 
         <section className={styles.sectionGrow}>
           <h2>
-            Flashes <span className={styles.count}>{loading ? "…" : flashes.length}</span>
+            Flashes <span className={styles.count}>{loading ? '…' : flashes.length}</span>
           </h2>
           {error && <p className={styles.error}>{error}</p>}
           {truncated && <p className={styles.warning}>Result hit the row limit — narrow the window.</p>}
           {summary && (
             <p className={styles.hint}>
               {clockTime(summary.first)} – {clockTime(summary.last)}
-              {summary.peak ? `, peak ${summary.peak.toExponential(2)} J` : ""}
+              {summary.peak ? `, peak ${summary.peak.toExponential(2)} J` : ''}
             </p>
           )}
 
@@ -297,7 +306,7 @@ export default function LightningApp() {
                       <td>{flash.lat.toFixed(3)}</td>
                       <td>{flash.lon.toFixed(3)}</td>
                       <td>{formatEnergy(flash.energy_j)}</td>
-                      <td>{flash.area_km2?.toFixed(0) ?? "—"}</td>
+                      <td>{flash.area_km2?.toFixed(0) ?? '—'}</td>
                     </tr>
                   );
                 })}
