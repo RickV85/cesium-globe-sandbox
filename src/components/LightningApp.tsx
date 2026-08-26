@@ -7,6 +7,7 @@ import type { Bounds, Flash, FlashesResponse } from '@/lib/types';
 import type { FocusRequest, PlaybackMode } from './LightningGlobe';
 import styles from './LightningApp.module.css';
 import DateInput from './DateInput';
+import TimeInput from './TimeInput';
 
 // Cesium touches `window` on import, so the globe can never render on the
 // server. Everything else on this page is happy to.
@@ -35,6 +36,8 @@ export const formatToDateString = (dateTimeString: string) =>
 
 export type DateValue = string;
 export type DateInputState = { start: DateValue; end: DateValue };
+export type TimeValue = string;
+export type TimeInputState = { start: TimeValue; end: TimeValue };
 
 export default function LightningApp() {
   const [bounds, setBounds] = useState<Bounds | null>(null);
@@ -42,6 +45,7 @@ export default function LightningApp() {
     start: '',
     end: '',
   });
+  const [timeInputState, setTimeInputState] = useState({ start: '00:00', end: '23:59' });
   const [applied, setApplied] = useState<{ start: string; end: string } | null>(null);
 
   /**
@@ -185,11 +189,8 @@ export default function LightningApp() {
     <div className={styles.shell}>
       <aside className={styles.panel}>
         <header className={styles.header}>
-          <h1>GOES-19 lightning</h1>
-          <p>
-            GLM flash detections over the Northern Rockies, served from Postgres and replayed against the
-            Cesium clock.
-          </p>
+          <h1>GOES-19 Lightning Flashes</h1>
+          <h2>GLM flash detections over the Northern Rockies</h2>
         </header>
 
         <section className={styles.section}>
@@ -200,6 +201,7 @@ export default function LightningApp() {
             min={bounds?.earliest ? formatToDateString(bounds.earliest) : ''}
             max={bounds?.latest ? formatToDateString(bounds.latest) : ''}
           />
+          <TimeInput value={timeInputState} onChange={setTimeInputState} />
           <div className={styles.buttonRow}>
             <button type="button" className={styles.primary} onClick={apply} disabled={loading}>
               Apply

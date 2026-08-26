@@ -21,7 +21,11 @@
   background: #101418;
   border-right: 1px solid #232a31;
   color: #d7dee5;
-  font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font:
+    13px/1.5 ui-sans-serif,
+    system-ui,
+    -apple-system,
+    sans-serif;
 }
 
 .globeLoading {
@@ -37,6 +41,11 @@
   font-size: 16px;
   font-weight: 600;
   color: #fff;
+}
+
+.header h2 {
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .header p {
@@ -92,7 +101,11 @@
   border-radius: 5px;
   /* background: #0b0e11; */
   /* color: #d7dee5; */
-  font: 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font:
+    11.5px/1.4 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
   min-width: 0;
 }
 
@@ -117,7 +130,9 @@
   border-radius: 6px;
   font: inherit;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
 }
 
 .button,
@@ -194,7 +209,11 @@
 .table {
   width: 100%;
   border-collapse: collapse;
-  font: 11.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font:
+    11.5px/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
 }
 
 .table thead th {
