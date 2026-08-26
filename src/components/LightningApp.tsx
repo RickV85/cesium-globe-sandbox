@@ -84,7 +84,6 @@ export default function LightningApp() {
         if (data.earliest && data.latest) {
           // `end` is exclusive, so nudge past the final flash to include it.
           const end = new Date(Date.parse(data.latest) + 1000).toISOString();
-          console.log({ end });
           setFormattedDateState({ start: data.earliest, end: data.latest });
           //  will need a seperate time state and set here
           setApplied({ start: data.earliest, end });

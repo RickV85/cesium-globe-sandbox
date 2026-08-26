@@ -28,21 +28,18 @@ type Props = {
 const HOME = Cesium.Rectangle.fromDegrees(-117, 41, -105, 49);
 
 /**
- * GLM flash energies span roughly 1e-15 to 1e-12 J, so the ramp is on a log
- * scale — a linear one would put almost every flash at the bottom.
+ * GLM flash energies span roughly 1e-15 to 1e-12 J — three decades — so the
+ * ramp runs on the exponent. A linear one would put nearly every flash at the
+ * bottom.
  */
-const LOG_E_MIN = Math.log10(1e-15);
-const LOG_E_MAX = Math.log10(1e-12);
-// The dim end stays clearly visible against bright terrain -- a darker blue
-// reads as "nothing there" at regional zoom, which is the wrong impression for
-// a detection that did happen.
-const DIM = Cesium.Color.fromCssColorString('#8fd4ff');
-const BRIGHT = Cesium.Color.fromCssColorString('#fffbe0');
+const MIN_EXP = -15;
+const DECADES = 3;
+const YELLOW_HUE = 0.14;
 
 function energyColor(energy: number | null): Cesium.Color {
   if (energy === null || energy <= 0) return Cesium.Color.WHITE;
-  const x = Cesium.Math.clamp((Math.log10(energy) - LOG_E_MIN) / (LOG_E_MAX - LOG_E_MIN), 0, 1);
-  return Cesium.Color.lerp(DIM, BRIGHT, x, new Cesium.Color());
+  const t = Cesium.Math.clamp((Math.log10(energy) - MIN_EXP) / DECADES, 0, 1);
+  return Cesium.Color.fromHsl(YELLOW_HUE * (1 - t), 1.0, 0.5);
 }
 
 /** Area runs ~70–800 km²; sqrt keeps the big ones from swamping the view. */
@@ -180,7 +177,7 @@ export default function LightningGlobe({ flashes, focus, onSelect }: Props) {
     if (!viewer || viewer.isDestroyed() || !focus) return;
 
     viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(focus.flash.lon, focus.flash.lat, 250_000),
+      destination: Cesium.Cartesian3.fromDegrees(focus.flash.lon, focus.flash.lat, 25000),
       duration: 1.5,
     });
   }, [focus]);
