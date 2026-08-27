@@ -22,6 +22,7 @@ type Props = {
    *  yank the view out from under the user. */
   focus: FocusRequest | null;
   onSelect: (flash: Flash | null) => void;
+  windowSeconds: number;
 };
 
 /** The ingest bbox (Northern Rockies) — where the camera opens. */
@@ -48,7 +49,13 @@ function areaPixels(area: number | null): number {
   return Cesium.Math.clamp(Math.sqrt(area) * 0.8, 11, 28);
 }
 
-export default function LightningGlobe({ flashes, focus, onSelect }: Props) {
+function buildAvailability(flash: Flash, windowSeconds: number): Cesium.TimeIntervalCollection {
+  const start = Cesium.JulianDate.fromIso8601(flash.flash_time);
+  const stop = Cesium.JulianDate.addSeconds(start, windowSeconds, new Cesium.JulianDate());
+  return new Cesium.TimeIntervalCollection([new Cesium.TimeInterval({ start, stop })]);
+}
+
+export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const handlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
@@ -57,6 +64,8 @@ export default function LightningGlobe({ flashes, focus, onSelect }: Props) {
   // Kept in a ref so the viewer-creation effect below can stay dependency-free
   // (it must run exactly once) while still calling the latest handler.
   const onSelectRef = useRef(onSelect);
+  const windowSecondsRef = useRef(windowSeconds);
+  const lastFlashTimeRef = useRef<Cesium.JulianDate | null>(null);
   useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
@@ -92,8 +101,8 @@ export default function LightningGlobe({ flashes, focus, onSelect }: Props) {
       navigationHelpButton: false,
       infoBox: false,
       selectionIndicator: true,
-      animation: false,
-      timeline: false,
+      animation: true,
+      timeline: true,
     });
 
     viewer.scene.globe.enableLighting = false;
@@ -165,10 +174,51 @@ export default function LightningGlobe({ flashes, focus, onSelect }: Props) {
           outlineWidth: 2,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
+        availability: buildAvailability(flash, windowSecondsRef.current),
       });
     }
 
     entities.resumeEvents();
+  }, [flashes]);
+
+  // --- Reset clock bounds on new data -----------------
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || viewer.isDestroyed()) return;
+    const clock = viewer.clock;
+
+    if (!flashes.length) {
+      const now = Cesium.JulianDate.now();
+      const nowMinusOneHour = Cesium.JulianDate.addHours(now, -1, new Cesium.JulianDate());
+
+      lastFlashTimeRef.current = null;
+      clock.clockRange = Cesium.ClockRange.UNBOUNDED;
+      clock.startTime = now;
+      clock.stopTime = now;
+      clock.currentTime = now;
+      clock.shouldAnimate = false;
+      viewer.timeline.zoomTo(nowMinusOneHour, now);
+    } else {
+      const start = Cesium.JulianDate.fromIso8601(flashes[0].flash_time);
+      const lastFlashTime = Cesium.JulianDate.fromIso8601(flashes[flashes.length - 1].flash_time);
+      lastFlashTimeRef.current = lastFlashTime;
+
+      const stop = Cesium.JulianDate.addSeconds(
+        lastFlashTime,
+        windowSecondsRef.current,
+        new Cesium.JulianDate(),
+      );
+      const spanSeconds = Cesium.JulianDate.secondsDifference(stop, start);
+
+      clock.clockRange = Cesium.ClockRange.LOOP_STOP;
+      clock.startTime = start;
+      clock.stopTime = stop;
+      clock.currentTime = start;
+      clock.shouldAnimate = false;
+      clock.multiplier = Cesium.Math.clamp(spanSeconds / 60, 0.5, 20000);
+
+      viewer.timeline.zoomTo(start, stop);
+    }
   }, [flashes]);
 
   // --- fly to a flash selected in the table ------------------------------
