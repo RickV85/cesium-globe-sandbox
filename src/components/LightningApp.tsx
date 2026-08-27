@@ -8,6 +8,7 @@ import type { FocusRequest } from './LightningGlobe';
 import styles from './LightningApp.module.css';
 import DateInput from './DateInput';
 import TimeInput from './TimeInput';
+import FlashWindowPicker from './FlashWindowPicker';
 
 // Cesium touches `window` on import, so the globe can never render on the
 // server. Everything else on this page is happy to.
@@ -54,6 +55,8 @@ const getBrowserTzOffset = () => {
   return `${utcOffsetInHours} hours`;
 };
 
+export const TEN_MIN_IN_SEC = 600;
+
 export default function LightningApp() {
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [dateInputState, setDateInputState] = useState<DateInputState>({
@@ -62,6 +65,8 @@ export default function LightningApp() {
   });
   const [timeInputState, setTimeInputState] = useState(INITIAL_TIME_STATE);
   const [applied, setApplied] = useState<{ start: string; end: string } | null>(null);
+
+  const [windowSeconds, setWindowSeconds] = useState(TEN_MIN_IN_SEC);
 
   /**
    * The last completed fetch, tagged with the window it belongs to.
@@ -203,7 +208,8 @@ export default function LightningApp() {
         </header>
 
         <section className={styles.section}>
-          <h2>Time window (UTC)</h2>
+          <h2>Date and Time window (UTC)</h2>
+          {/* Need to add setError to props and address input errors */}
           <DateInput
             value={dateInputState}
             onChange={setFormattedDateState}
@@ -219,6 +225,7 @@ export default function LightningApp() {
             {'.'}
           </p>
           <TimeInput value={timeInputState} onChange={setTimeInputState} />
+          <FlashWindowPicker windowSeconds={windowSeconds} setWindowSeconds={setWindowSeconds} setError={setError} />
           <div className={styles.buttonRow}>
             <button type="button" className={styles.primary} onClick={apply} disabled={loading}>
               Apply
@@ -293,8 +300,12 @@ export default function LightningApp() {
           </div>
         </section>
       </aside>
-      {/* hardcoded 10 minutes until picker dropdown is created */}
-      <LightningGlobe flashes={flashes} focus={focus} onSelect={handleGlobeSelect} windowSeconds={600} />
+      <LightningGlobe
+        flashes={flashes}
+        focus={focus}
+        onSelect={handleGlobeSelect}
+        windowSeconds={windowSeconds}
+      />
     </div>
   );
 }
