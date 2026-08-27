@@ -10,7 +10,7 @@ export default function DateInput({ value, onChange }: Props) {
   return (
     <div>
       <label className={sharedStyles.field}>
-        <span>Start date</span>
+        <span>Start time (UTC)</span>
         <input
           value={value.start}
           onChange={(e) => onChange({ start: e.target.value, end: value.end })}
@@ -18,7 +18,7 @@ export default function DateInput({ value, onChange }: Props) {
         />
       </label>
       <label className={sharedStyles.field}>
-        <span>End date</span>
+        <span>End time (UTC)</span>
         <input
           value={value.end}
           onChange={(e) => onChange({ end: e.target.value, start: value.start })}

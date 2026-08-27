@@ -48,9 +48,10 @@ const toIsoUtc = (date: DateValue, time: TimeValue): string | null =>
   date && time ? `${date}T${time.length === 5 ? `${time}:00` : time}Z` : null;
 
 const getBrowserTzOffset = () => {
-  const tzOffsetInHours = new Date().getTimezoneOffset() / 60;
-  if (Number.isNaN(tzOffsetInHours)) return 'unknown';
-  return `${tzOffsetInHours} hours`;
+  const utcOffsetInMinutes = new Date().getTimezoneOffset();
+  if (Number.isNaN(utcOffsetInMinutes)) return 'unknown';
+  const utcOffsetInHours = -utcOffsetInMinutes / 60; // invert due to getTimezone offset returning inverted values by default
+  return `${utcOffsetInHours} hours`;
 };
 
 export default function LightningApp() {
@@ -209,7 +210,14 @@ export default function LightningApp() {
             min={bounds?.earliest ? formatToDateString(bounds.earliest) : ''}
             max={bounds?.latest ? formatToDateString(bounds.latest) : ''}
           />
-          <p>{`Your browser's TZ offset from UTC is ${getBrowserTzOffset()}.`}</p>
+          <p>
+            {"Your browser's TZ offset from UTC is "}
+            {/* Differs between server (build/host TZ) and client (visitor's TZ)
+                by design -- suppress the resulting hydration mismatch rather
+                than delaying this text to a post-mount render. */}
+            <span suppressHydrationWarning>{getBrowserTzOffset()}</span>
+            {'.'}
+          </p>
           <TimeInput value={timeInputState} onChange={setTimeInputState} />
           <div className={styles.buttonRow}>
             <button type="button" className={styles.primary} onClick={apply} disabled={loading}>
@@ -285,8 +293,8 @@ export default function LightningApp() {
           </div>
         </section>
       </aside>
-
-      <LightningGlobe flashes={flashes} focus={focus} onSelect={handleGlobeSelect} />
+      {/* hardcoded 10 minutes until picker dropdown is created */}
+      <LightningGlobe flashes={flashes} focus={focus} onSelect={handleGlobeSelect} windowSeconds={600} />
     </div>
   );
 }
