@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
 
 import { flashKey, type Bounds, type Flash, type FlashesResponse } from '@/lib/types';
@@ -38,6 +38,12 @@ export type DateValue = string;
 export type DateInputState = { start: DateValue; end: DateValue };
 export type TimeValue = string;
 export type TimeInputState = { start: TimeValue; end: TimeValue };
+
+export type ErrorState = {
+  dateErr?: string;
+  fetchErr?: string;
+  flashWinErr?: string;
+};
 
 /**
  * One ISO-8601 UTC instant from a date and a time input, or null if either is
@@ -80,11 +86,13 @@ export default function LightningApp() {
     flashes: Flash[];
     truncated: boolean;
   } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [errorState, setErrorState] = useState<ErrorState>({});
   const [selected, setSelected] = useState<Flash | null>(null);
   const [focus, setFocus] = useState<FocusRequest | null>(null);
   const nonce = useRef(0);
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+
+  const hasError = Object.values(errorState).some((msg) => !!msg);
 
   const setFormattedDateState = ({ start, end }: { start: string; end: string }): void =>
     setDateInputState({
@@ -116,7 +124,13 @@ export default function LightningApp() {
           setApplied({ start: data.earliest, end });
         }
       } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+        if (!cancelled)
+          setErrorState((prev) => {
+            return {
+              ...prev,
+              fetchErr: cause instanceof Error ? cause.message : String(cause),
+            };
+          });
       }
     })();
     return () => {
@@ -139,10 +153,16 @@ export default function LightningApp() {
         if (!response.ok) throw new Error(data.error ?? `flashes returned ${response.status}`);
         if (cancelled) return;
         setResult({ key: windowKey, flashes: data.flashes, truncated: Boolean(data.truncated) });
-        setError(null);
+        setErrorState((prev) => ({ ...prev, fetchErr: '' }));
         setSelected(null);
       } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+        if (!cancelled)
+          setErrorState((prev) => {
+            return {
+              ...prev,
+              fetchErr: cause instanceof Error ? cause.message : String(cause),
+            };
+          });
       }
     })();
 
@@ -154,22 +174,22 @@ export default function LightningApp() {
   const fresh = result?.key === windowKey ? result : null;
   const flashes = fresh?.flashes ?? NO_FLASHES;
   const truncated = fresh?.truncated ?? false;
-  const loading = error === null && (bounds === null || (windowKey !== null && fresh === null));
+  const loading = !hasError && (bounds === null || (windowKey !== null && fresh === null));
 
   const apply = useCallback(() => {
     const start = toIsoUtc(dateInputState.start, timeInputState.start);
     const end = toIsoUtc(dateInputState.end, timeInputState.end);
 
     if (!start || !end) {
-      setError('Pick a date and a time for both ends of the window.');
+      setErrorState((prev) => ({ ...prev, dateErr: 'Pick a date and a time for both ends of the window.' }));
       return;
     }
     // Fixed-width ISO UTC, so string order is chronological order.
     if (end <= start) {
-      setError('End must be after start.');
+      setErrorState((prev) => ({ ...prev, dateErr: 'End must be after start.' }));
       return;
     }
-    setError(null);
+    setErrorState((prev) => ({ ...prev, dateErr: '' }));
     setApplied({ start, end });
   }, [dateInputState, timeInputState]);
 
@@ -205,6 +225,18 @@ export default function LightningApp() {
   //   };
   // }, [flashes]);
 
+  const errorDisplay = useMemo(
+    () =>
+      Object.entries(errorState)
+        .filter(([, errMsg]) => !!errMsg)
+        .map(([errName, errMsg]) => (
+          <p key={errName} className={styles.error}>
+            {errMsg}
+          </p>
+        )),
+    [errorState],
+  );
+
   return (
     <div className={styles.shell}>
       <aside className={styles.panel}>
@@ -215,7 +247,7 @@ export default function LightningApp() {
 
         <section className={styles.section}>
           <h2>Date and Time window (UTC)</h2>
-          {/* Need to add setError to props and address input errors */}
+          {/* Need to add setErrorState to props and address input errors */}
           <DateInput
             value={dateInputState}
             onChange={setFormattedDateState}
@@ -227,7 +259,7 @@ export default function LightningApp() {
           <FlashWindowPicker
             windowSeconds={windowSeconds}
             setWindowSeconds={setWindowSeconds}
-            setError={setError}
+            setErrorState={setErrorState}
           />
           <div className={styles.buttonRow}>
             <button type="button" className={styles.primary} onClick={apply} disabled={loading}>
@@ -249,7 +281,7 @@ export default function LightningApp() {
           <h2>
             Flashes <span className={styles.count}>{loading ? '…' : flashes.length}</span>
           </h2>
-          {error && <p className={styles.error}>{error}</p>}
+          {errorDisplay}
           {truncated && <p className={styles.warning}>Result hit the row limit — narrow the window.</p>}
           {/* {summary && (
             <p className={styles.hint}>
@@ -291,7 +323,7 @@ export default function LightningApp() {
                     </tr>
                   );
                 })}
-                {!loading && !flashes.length && !error && (
+                {!loading && !flashes.length && !hasError && (
                   <tr>
                     <td colSpan={5} className={styles.empty}>
                       No flashes in this window.
