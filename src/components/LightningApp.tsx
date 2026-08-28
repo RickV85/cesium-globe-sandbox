@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
 
 import { flashKey, type Bounds, type Flash, type FlashesResponse } from '@/lib/types';
@@ -91,6 +91,12 @@ export default function LightningApp() {
       start: formatToDateString(start),
       end: formatToDateString(end),
     });
+
+  const tzOffset = useSyncExternalStore(
+    () => () => {}, // subscribe: value never changes post-mount
+    () => getBrowserTzOffset(), // client snapshot
+    () => 'unknown', // server snapshot
+  );
 
   // Discover the window the data actually covers, and open on it.
   useEffect(() => {
@@ -216,16 +222,13 @@ export default function LightningApp() {
             min={bounds?.earliest ? formatToDateString(bounds.earliest) : ''}
             max={bounds?.latest ? formatToDateString(bounds.latest) : ''}
           />
-          <p>
-            {"Your browser's TZ offset from UTC is "}
-            {/* Differs between server (build/host TZ) and client (visitor's TZ)
-                by design -- suppress the resulting hydration mismatch rather
-                than delaying this text to a post-mount render. */}
-            <span suppressHydrationWarning>{getBrowserTzOffset()}</span>
-            {'.'}
-          </p>
+          <p>{`Your browser's TZ offset from UTC is ${tzOffset}`}</p>
           <TimeInput value={timeInputState} onChange={setTimeInputState} />
-          <FlashWindowPicker windowSeconds={windowSeconds} setWindowSeconds={setWindowSeconds} setError={setError} />
+          <FlashWindowPicker
+            windowSeconds={windowSeconds}
+            setWindowSeconds={setWindowSeconds}
+            setError={setError}
+          />
           <div className={styles.buttonRow}>
             <button type="button" className={styles.primary} onClick={apply} disabled={loading}>
               Apply
