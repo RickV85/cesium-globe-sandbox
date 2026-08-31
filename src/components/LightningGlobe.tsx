@@ -64,7 +64,6 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
   // Kept in a ref so the viewer-creation effect below can stay dependency-free
   // (it must run exactly once) while still calling the latest handler.
   const onSelectRef = useRef(onSelect);
-  const windowSecondsRef = useRef(windowSeconds);
   const lastFlashTimeRef = useRef<Cesium.JulianDate | null>(null);
   useEffect(() => {
     onSelectRef.current = onSelect;
@@ -132,7 +131,7 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
       name: 'Northern Rockies ingest bbox',
       polyline: {
         positions: Cesium.Cartesian3.fromDegreesArray([w, s, e, s, e, n, w, n, w, s]),
-        material: Cesium.Color.RED,
+        material: Cesium.Color.WHITE,
         width: 3,
         clampToGround: true,
       },
@@ -146,7 +145,7 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
     };
   }, []);
 
-  // --- rebuild entities when the data changes -----------------------------
+  // --- add/change/delete entities when the data changes -----------------------------
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed()) return;
@@ -155,13 +154,19 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
     // Batch: without this Cesium fires a change event per entity and the
     // visualizers re-run for every single one.
     entities.suspendEvents();
-    // Remove only the flash entities this effect owns
-    for (const id of byEntityId.current.keys()) entities.removeById(id);
-    byEntityId.current.clear();
+
+    const seen = new Set<string>();
 
     for (const flash of flashes) {
       const id = flashKey(flash);
+      seen.add(id);
       byEntityId.current.set(id, flash);
+
+      const existing = entities.getById(id);
+      if (existing) {
+        existing.availability = buildAvailability(flash, windowSeconds);
+        continue;
+      }
 
       entities.add({
         id,
@@ -174,12 +179,20 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
           outlineWidth: 2,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
-        availability: buildAvailability(flash, windowSecondsRef.current),
+        availability: buildAvailability(flash, windowSeconds),
       });
     }
 
+    // Remove only flash entities that are no longer present.
+    for (const id of byEntityId.current.keys()) {
+      if (!seen.has(id)) {
+        entities.removeById(id);
+        byEntityId.current.delete(id);
+      }
+    }
+
     entities.resumeEvents();
-  }, [flashes]);
+  }, [flashes, windowSeconds]);
 
   // --- Reset clock bounds on new data -----------------
   useEffect(() => {
@@ -203,23 +216,21 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
       const lastFlashTime = Cesium.JulianDate.fromIso8601(flashes[flashes.length - 1].flash_time);
       lastFlashTimeRef.current = lastFlashTime;
 
-      const stop = Cesium.JulianDate.addSeconds(
-        lastFlashTime,
-        windowSecondsRef.current,
-        new Cesium.JulianDate(),
-      );
-      const spanSeconds = Cesium.JulianDate.secondsDifference(stop, start);
+      // Adds windowSeconds on so that all flashes are shown by end of playback, so changing window length
+      // will change the end of the timeline as well
+      const stop = Cesium.JulianDate.addSeconds(lastFlashTime, windowSeconds, new Cesium.JulianDate());
+      const dataSpanSeconds = Math.max(Cesium.JulianDate.secondsDifference(lastFlashTime, start), 1);
 
       clock.clockRange = Cesium.ClockRange.LOOP_STOP;
       clock.startTime = start;
       clock.stopTime = stop;
       clock.currentTime = start;
       clock.shouldAnimate = false;
-      clock.multiplier = Cesium.Math.clamp(spanSeconds / 60, 0.5, 20000);
+      clock.multiplier = Cesium.Math.clamp(dataSpanSeconds / 60, 0.5, 20000);
 
       viewer.timeline.zoomTo(start, stop);
     }
-  }, [flashes]);
+  }, [flashes, windowSeconds]);
 
   // --- fly to a flash selected in the table ------------------------------
   useEffect(() => {
