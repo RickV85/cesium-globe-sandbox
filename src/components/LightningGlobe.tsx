@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useContext, useEffect, useRef } from 'react';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 
 import { ION_TOKEN, hasIonToken } from '@/lib/ion';
 import { flashKey, type Flash } from '@/lib/types';
 import styles from './LightningGlobe.module.css';
+import { AppContext } from '@/app/contexts/AppContext';
 
 /**
  * A request to point the camera at a flash.
@@ -56,6 +57,7 @@ function buildAvailability(flash: Flash, windowSeconds: number): Cesium.TimeInte
 }
 
 export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds }: Props) {
+  const { isTimeWindowEnabled } = useContext(AppContext);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const handlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
@@ -144,6 +146,12 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
       viewerRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    // isTimeWindowEnabled
+    //   ? viewerRef.current?.timeline.container.cl
+    //   : viewerRef.current?.timeline.container.remove();
+  }, [isTimeWindowEnabled]);
 
   // --- add/change/delete entities when the data changes -----------------------------
   useEffect(() => {

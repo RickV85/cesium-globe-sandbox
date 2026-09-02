@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react';
+import styles from './FlashWindowPicker.module.css';
+import { useContext, useEffect, useState } from 'react';
 import type { Dispatch } from 'react';
 import { ErrorState, TEN_MIN_IN_SEC } from './LightningApp';
 import sharedStyles from './LightningApp.module.css';
+import { Button } from '@mui/material';
+import clsx from 'clsx';
+import { AppContext } from '@/app/contexts/AppContext';
 
 interface Props {
   windowSeconds: number;
@@ -11,7 +15,6 @@ interface Props {
 
 const ONE_MIN = 60;
 const ONE_HOUR = ONE_MIN * 60;
-
 const convertWinSecForDisplay = (winSec: number) => {
   const hours = Math.floor(winSec / ONE_HOUR);
   const minutes = (winSec % ONE_HOUR) / ONE_MIN;
@@ -19,9 +22,9 @@ const convertWinSecForDisplay = (winSec: number) => {
 };
 
 export default function FlashWindowPicker({ windowSeconds, setErrorState, setWindowSeconds }: Props) {
-  const DEFAULT_MIN_STATE = TEN_MIN_IN_SEC / 60;
+  const { isTimeWindowEnabled, setIsTimeWindowEnabled } = useContext(AppContext);
   const [hours, setHours] = useState<number>(0);
-  const [minutes, setMinutes] = useState<number>(DEFAULT_MIN_STATE);
+  const [minutes, setMinutes] = useState<number>(TEN_MIN_IN_SEC / 60);
 
   useEffect(() => {
     if (minutes >= 60 || minutes < 0) {
@@ -45,10 +48,13 @@ export default function FlashWindowPicker({ windowSeconds, setErrorState, setWin
     }
   }, [hours, minutes, setErrorState, setWindowSeconds, windowSeconds]);
 
+  const handleWindowEnableSelect = () => {
+    setIsTimeWindowEnabled(!isTimeWindowEnabled);
+  };
+
   return (
-    <div className={sharedStyles.section}>
+    <section className={sharedStyles.section}>
       <h2>Select playback window for timeline playback in minutes</h2>
-      <p>{`Currently shown window length: ${convertWinSecForDisplay(windowSeconds)}`}</p>
       <label className={sharedStyles.field}>
         <span>Hours</span>
         <input
@@ -68,6 +74,21 @@ export default function FlashWindowPicker({ windowSeconds, setErrorState, setWin
           min={0}
         />
       </label>
-    </div>
+      <div className={styles.windowPickerAndInfo}>
+        <Button
+          variant="outlined"
+          classes={{ root: clsx(sharedStyles.button, sharedStyles.primary, styles.timeWindowButton) }}
+          onClick={handleWindowEnableSelect}
+        >
+          {isTimeWindowEnabled ? 'Show all flashes' : 'Enable time window'}
+        </Button>
+        {isTimeWindowEnabled && (
+          <p className={sharedStyles.hint} style={{ margin: 0 }}>
+            Window length:
+            <span className={sharedStyles.count}>{convertWinSecForDisplay(windowSeconds)}</span>
+          </p>
+        )}
+      </div>
+    </section>
   );
 }

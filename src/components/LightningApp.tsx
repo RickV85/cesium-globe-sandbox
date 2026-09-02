@@ -244,23 +244,21 @@ export default function LightningApp() {
           <h1>GOES-19 Lightning Flashes</h1>
           <h2>GLM flash detections over the Northern Rockies</h2>
         </header>
-
         <section className={styles.section}>
           <h2>Date and Time window (UTC)</h2>
-          {/* Need to add setErrorState to props and address input errors */}
+          {bounds?.earliest && (
+            <p className={styles.hint}>
+              Dataset holds {bounds.count} flash records, between {bounds.earliest.slice(0, 10)} and{' '}
+              {bounds.latest?.slice(0, 10)}.
+            </p>
+          )}
           <DateInput
             value={dateInputState}
             onChange={setFormattedDateState}
             min={bounds?.earliest ? formatToDateString(bounds.earliest) : ''}
             max={bounds?.latest ? formatToDateString(bounds.latest) : ''}
           />
-          <p>{`Your browser's TZ offset from UTC is ${tzOffset}`}</p>
-          <TimeInput value={timeInputState} onChange={setTimeInputState} />
-          <FlashWindowPicker
-            windowSeconds={windowSeconds}
-            setWindowSeconds={setWindowSeconds}
-            setErrorState={setErrorState}
-          />
+          <TimeInput tzOffset={tzOffset} value={timeInputState} onChange={setTimeInputState} />
           <div className={styles.buttonRow}>
             <button type="button" className={styles.primary} onClick={apply} disabled={loading}>
               Apply
@@ -269,17 +267,16 @@ export default function LightningApp() {
               Full extent
             </button>
           </div>
-          {bounds?.earliest && (
-            <p className={styles.hint}>
-              Dataset holds {bounds.count} flashes, {clockTime(bounds.earliest)} – {clockTime(bounds.latest!)}{' '}
-              on {bounds.earliest.slice(0, 10)}.
-            </p>
-          )}
+          <FlashWindowPicker
+            windowSeconds={windowSeconds}
+            setWindowSeconds={setWindowSeconds}
+            setErrorState={setErrorState}
+          />
         </section>
-
         <section className={styles.sectionGrow}>
           <h2>
-            Flashes <span className={styles.count}>{loading ? '…' : flashes.length}</span>
+            Flashes in date / time window:{' '}
+            <span className={styles.count}>{loading ? '…' : flashes.length}</span>
           </h2>
           {errorDisplay}
           {truncated && <p className={styles.warning}>Result hit the row limit — narrow the window.</p>}

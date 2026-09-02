@@ -1,5 +1,10 @@
-import LightningApp from "@/components/LightningApp";
+import LightningApp from '@/components/LightningApp';
+import { AppContextProvider } from './contexts/AppContext';
 
 export default function Home() {
-  return <LightningApp />;
+  return (
+    <AppContextProvider>
+      <LightningApp />
+    </AppContextProvider>
+  );
 }

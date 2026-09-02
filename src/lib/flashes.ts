@@ -4,7 +4,7 @@ import type { Bounds, Flash } from "./types";
 export type { Bounds, Flash };
 
 export const DEFAULT_SATELLITE = 19;
-export const MAX_LIMIT = 50_000;
+export const MAX_LIMIT = 5_000; // reduced to 5, page loading issues
 
 /*
  * A note on the to_char() calls below.

@@ -1,0 +1,10 @@
+.timeWindowButton {
+  flex: 0 1 50%;
+}
+
+.windowPickerAndInfo {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  margin: 0.75rem 0 0.5rem 0;
+}

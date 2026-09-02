@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
-import Script from "next/script";
-import "./globals.css";
+import type { Metadata } from 'next';
+import Script from 'next/script';
+import './globals.css';
+import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter';
 
 export const metadata: Metadata = {
-  title: "Cesium globe sandbox",
-  description: "A guided tour of CesiumJS, with live NOAA satellite imagery.",
+  title: 'Cesium globe sandbox',
+  description: 'A guided tour of CesiumJS, with live NOAA satellite imagery.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -21,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Script id="cesium-base-url" strategy="beforeInteractive">
           {`window.CESIUM_BASE_URL = "/cesium";`}
         </Script>
-        {children}
+        <AppRouterCacheProvider options={{ prepend: true }}>{children}</AppRouterCacheProvider>
       </body>
     </html>
   );

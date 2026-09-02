@@ -55,7 +55,7 @@
 
 .section,
 .sectionGrow {
-  margin-top: 18px;
+  margin-top: 24px;
 }
 
 .sectionGrow {
@@ -137,6 +137,7 @@
   border: 1px solid #2b333b;
   background: #171c22;
   color: #d7dee5;
+  text-transform: none;
 }
 
 .button:hover:not(:disabled) {
@@ -161,7 +162,7 @@
 }
 
 .hint {
-  margin: 6px 0 0;
+  margin: 1rem 0rem;
   color: #93a1ad;
   font-size: 12px;
 }
