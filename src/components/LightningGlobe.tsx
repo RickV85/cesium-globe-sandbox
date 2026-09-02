@@ -4,7 +4,6 @@ import { useCallback, useContext, useEffect, useRef } from 'react';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 
-import { ION_TOKEN, hasIonToken } from '@/lib/ion';
 import { flashKey, type Flash } from '@/lib/types';
 import styles from './LightningGlobe.module.css';
 import { AppContext } from '@/app/contexts/AppContext';
@@ -37,6 +36,8 @@ const HOME = Cesium.Rectangle.fromDegrees(-117, 41, -105, 49);
 const MIN_EXP = -15;
 const DECADES = 3;
 const YELLOW_HUE = 0.14;
+
+const ION_TOKEN = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
 
 function energyColor(energy: number | null): Cesium.Color {
   if (energy === null || energy <= 0) return Cesium.Color.WHITE;
@@ -79,22 +80,9 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
   useEffect(() => {
     if (!containerRef.current || viewerRef.current) return;
 
-    if (hasIonToken) Cesium.Ion.defaultAccessToken = ION_TOKEN;
+    if (!!ION_TOKEN) Cesium.Ion.defaultAccessToken = ION_TOKEN;
 
     const viewer = new Cesium.Viewer(containerRef.current, {
-      ...(hasIonToken
-        ? {}
-        : {
-            baseLayer: Cesium.ImageryLayer.fromProviderAsync(
-              Promise.resolve(
-                new Cesium.OpenStreetMapImageryProvider({
-                  url: 'https://tile.openstreetmap.org/',
-                  credit: new Cesium.Credit('© OpenStreetMap contributors'),
-                }),
-              ),
-              {},
-            ),
-          }),
       baseLayerPicker: false,
       geocoder: false,
       homeButton: false,
@@ -107,6 +95,7 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
     });
 
     viewer.scene.globe.enableLighting = false;
+    viewer.scene.globe.tileCacheSize = 10;
     viewer.camera.setView({ destination: HOME });
     viewerRef.current = viewer;
 
@@ -118,10 +107,6 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
       onSelectRef.current(id ? (byEntityId.current.get(id) ?? null) : null);
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
     handlerRef.current = handler;
-
-    if (process.env.NODE_ENV === 'development') {
-      (window as unknown as Record<string, unknown>).viewer = viewer;
-    }
 
     // Draw the ingest bbox outline once. Rectangle stores its bounds in
     // radians, so they're converted to degrees before building the corners
