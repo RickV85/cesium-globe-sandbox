@@ -27,7 +27,10 @@
   border-radius: 6px;
   background: rgba(16, 20, 24, 0.85);
   color: #d7dee5;
-  font: 12px/1 ui-sans-serif, system-ui, sans-serif;
+  font:
+    12px/1 ui-sans-serif,
+    system-ui,
+    sans-serif;
   cursor: pointer;
 }
 
@@ -35,3 +38,8 @@
   background: rgba(29, 36, 43, 0.95);
   border-color: #3b464f;
 }
+
+.hidden {
+  display: none;
+}
+

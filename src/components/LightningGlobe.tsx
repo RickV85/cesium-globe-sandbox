@@ -132,12 +132,6 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
     };
   }, []);
 
-  useEffect(() => {
-    // isTimeWindowEnabled
-    //   ? viewerRef.current?.timeline.container.cl
-    //   : viewerRef.current?.timeline.container.remove();
-  }, [isTimeWindowEnabled]);
-
   // --- add/change/delete entities when the data changes -----------------------------
   useEffect(() => {
     const viewer = viewerRef.current;
@@ -157,7 +151,7 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
 
       const existing = entities.getById(id);
       if (existing) {
-        existing.availability = buildAvailability(flash, windowSeconds);
+        existing.availability = isTimeWindowEnabled ? buildAvailability(flash, windowSeconds) : undefined;
         continue;
       }
 
@@ -172,7 +166,7 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
           outlineWidth: 2,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
-        availability: buildAvailability(flash, windowSeconds),
+        availability: isTimeWindowEnabled ? buildAvailability(flash, windowSeconds) : undefined,
       });
     }
 
@@ -184,8 +178,18 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
       }
     }
 
+    if (isTimeWindowEnabled) {
+      viewer.animation.container.classList.remove(styles.hidden);
+      viewer.timeline.container.classList.remove(styles.hidden);
+      viewer.forceResize();
+    } else {
+      viewer.animation.container.classList.add(styles.hidden);
+      viewer.timeline.container.classList.add(styles.hidden);
+      viewer.forceResize();
+    }
+
     entities.resumeEvents();
-  }, [flashes, windowSeconds]);
+  }, [isTimeWindowEnabled, flashes, windowSeconds]);
 
   // --- Reset clock bounds on new data -----------------
   useEffect(() => {
