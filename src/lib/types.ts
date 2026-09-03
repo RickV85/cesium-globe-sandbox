@@ -38,6 +38,8 @@ export type Bounds = {
 export type FlashesResponse = {
   start: string | null;
   end: string | null;
+  first: string | null;
+  last: string | null;
   count: number;
   truncated?: boolean;
   flashes: Flash[];

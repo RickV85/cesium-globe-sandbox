@@ -1,5 +1,5 @@
 import styles from './FlashWindowPicker.module.css';
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useState } from 'react';
 import type { Dispatch } from 'react';
 import { ErrorState, TEN_MIN_IN_SEC } from './LightningApp';
 import sharedStyles from './LightningApp.module.css';
@@ -26,7 +26,7 @@ export default function FlashWindowPicker({ windowSeconds, setErrorState, setWin
   const [hours, setHours] = useState<number>(0);
   const [minutes, setMinutes] = useState<number>(TEN_MIN_IN_SEC / 60);
 
-  useEffect(() => {
+  const handleTimeWindowUpdate = () => {
     if (minutes >= 60 || minutes < 0) {
       setErrorState((prev) => ({
         ...prev,
@@ -46,18 +46,25 @@ export default function FlashWindowPicker({ windowSeconds, setErrorState, setWin
     if (windowSeconds !== newValue) {
       setWindowSeconds(newValue);
     }
-  }, [hours, minutes, setErrorState, setWindowSeconds, windowSeconds]);
+  };
 
-  const handleWindowEnableSelect = () => {
+  const handleTimeWindowEnable = () => {
     setIsTimeWindowEnabled(!isTimeWindowEnabled);
   };
 
   return (
     <section className={sharedStyles.section}>
       <h2>Select playback window for timeline playback in minutes</h2>
+      <p className={sharedStyles.hint}>
+        {isTimeWindowEnabled ? 'Current window length:' : 'Time window disabled'}
+        {isTimeWindowEnabled && (
+          <span className={sharedStyles.count}>{convertWinSecForDisplay(windowSeconds)}</span>
+        )}
+      </p>
       <label className={sharedStyles.field}>
         <span>Hours</span>
         <input
+          disabled={!isTimeWindowEnabled}
           type="number"
           value={Number.isNaN(hours) ? '' : hours}
           onChange={(e) => setHours(e.target.valueAsNumber)}
@@ -67,6 +74,7 @@ export default function FlashWindowPicker({ windowSeconds, setErrorState, setWin
       <label className={sharedStyles.field}>
         <span>Minutes</span>
         <input
+          disabled={!isTimeWindowEnabled}
           type="number"
           value={Number.isNaN(minutes) ? '' : minutes}
           onChange={(e) => setMinutes(e.target.valueAsNumber)}
@@ -76,18 +84,20 @@ export default function FlashWindowPicker({ windowSeconds, setErrorState, setWin
       </label>
       <div className={styles.windowPickerAndInfo}>
         <Button
+          disabled={!isTimeWindowEnabled}
           variant="outlined"
           classes={{ root: clsx(sharedStyles.button, sharedStyles.primary, styles.timeWindowButton) }}
-          onClick={handleWindowEnableSelect}
+          onClick={handleTimeWindowUpdate}
+        >
+          Apply Time Window
+        </Button>
+        <Button
+          variant="outlined"
+          classes={{ root: clsx(sharedStyles.button, styles.timeWindowButton) }}
+          onClick={handleTimeWindowEnable}
         >
           {isTimeWindowEnabled ? 'Show all flashes' : 'Enable time window'}
         </Button>
-        {isTimeWindowEnabled && (
-          <p className={sharedStyles.hint} style={{ margin: 0 }}>
-            Window length:
-            <span className={sharedStyles.count}>{convertWinSecForDisplay(windowSeconds)}</span>
-          </p>
-        )}
       </div>
     </section>
   );

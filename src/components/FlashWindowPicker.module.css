@@ -5,6 +5,6 @@
 .windowPickerAndInfo {
   align-items: center;
   display: flex;
-  gap: 1rem;
+  gap: 6px;
   margin: 0.75rem 0 0.5rem 0;
 }

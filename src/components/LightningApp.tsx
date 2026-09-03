@@ -9,6 +9,7 @@ import styles from './LightningApp.module.css';
 import DateInput from './DateInput';
 import TimeInput from './TimeInput';
 import FlashWindowPicker from './FlashWindowPicker';
+import { MAX_LIMIT } from '@/constants';
 
 // Cesium touches `window` on import, so the globe can never render on the
 // server. Everything else on this page is happy to.
@@ -31,8 +32,15 @@ function formatEnergy(j: number | null): string {
   return j === null ? '—' : j.toExponential(2);
 }
 
-export const formatToDateString = (dateTimeString: string) =>
-  new Date(dateTimeString).toLocaleDateString('fr-CA', { timeZone: 'UTC' });
+export const formatToDateString = (dateTimeString: string | null | undefined) => {
+  if (!dateTimeString) return 'unknown date';
+  return new Date(dateTimeString).toLocaleDateString('fr-CA', { timeZone: 'UTC' });
+};
+
+const formatIsoDateTime = (dateTimeString: string | null | undefined) => {
+  if (!dateTimeString) return 'unknown date';
+  return new Date(dateTimeString).toLocaleString('en-US', { timeZone: 'UTC' });
+};
 
 export type DateValue = string;
 export type DateInputState = { start: DateValue; end: DateValue };
@@ -83,7 +91,9 @@ export default function LightningApp() {
    */
   const [result, setResult] = useState<{
     key: string;
-    flashes: Flash[];
+    flashes: FlashesResponse['flashes'];
+    first: FlashesResponse['first'];
+    last: FlashesResponse['last'];
     truncated: boolean;
   } | null>(null);
   const [errorState, setErrorState] = useState<ErrorState>({});
@@ -119,9 +129,8 @@ export default function LightningApp() {
         if (data.earliest && data.latest) {
           // `end` is exclusive, so nudge past the final flash to include it.
           const end = new Date(Date.parse(data.latest) + 1000).toISOString();
-          setFormattedDateState({ start: data.earliest, end: data.latest });
-          //  will need a seperate time state and set here
           setApplied({ start: data.earliest, end });
+          setFormattedDateState({ start: data.earliest, end: data.latest });
         }
       } catch (cause) {
         if (!cancelled)
@@ -152,7 +161,9 @@ export default function LightningApp() {
         const data: FlashesResponse & { error?: string } = await response.json();
         if (!response.ok) throw new Error(data.error ?? `flashes returned ${response.status}`);
         if (cancelled) return;
-        setResult({ key: windowKey, flashes: data.flashes, truncated: Boolean(data.truncated) });
+
+        const { flashes, first, last, truncated } = data;
+        setResult({ key: windowKey, flashes, first, last, truncated: Boolean(truncated) });
         setErrorState((prev) => ({ ...prev, fetchErr: '' }));
         setSelected(null);
       } catch (cause) {
@@ -279,7 +290,12 @@ export default function LightningApp() {
             <span className={styles.count}>{loading ? '…' : flashes.length}</span>
           </h2>
           {errorDisplay}
-          {truncated && <p className={styles.warning}>Result hit the row limit — narrow the window.</p>}
+          {result && truncated && (
+            <p className={styles.warning}>
+              WARNING - Only the first {MAX_LIMIT} flash results between {formatIsoDateTime(result.first)} and{' '}
+              {formatIsoDateTime(result.last)} are being displayed below and on the map.
+            </p>
+          )}
           {/* {summary && (
             <p className={styles.hint}>
               {clockTime(summary.first)} – {clockTime(summary.last)}

@@ -1,4 +1,5 @@
-import { MAX_LIMIT, queryBounds, queryFlashes } from "@/lib/flashes";
+import { queryBounds, queryFlashes } from '@/lib/flashes';
+import { MAX_LIMIT } from '@/constants';
 
 /**
  * GET /api/flashes?start=<iso>&end=<iso>&limit=<n>
@@ -27,10 +28,10 @@ export async function GET(request: Request) {
   let limit: number | undefined;
 
   try {
-    start = parseInstant(params.get("start"), "start");
-    end = parseInstant(params.get("end"), "end");
+    start = parseInstant(params.get('start'), 'start');
+    end = parseInstant(params.get('end'), 'end');
 
-    const rawLimit = params.get("limit");
+    const rawLimit = params.get('limit');
     if (rawLimit !== null) {
       const n = Number(rawLimit);
       if (!Number.isInteger(n) || n < 1) {
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
     }
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : "Invalid query parameters." },
+      { error: error instanceof Error ? error.message : 'Invalid query parameters.' },
       { status: 400 },
     );
   }
@@ -50,7 +51,7 @@ export async function GET(request: Request) {
     if (!start || !end) {
       const bounds = await queryBounds();
       if (!bounds.earliest || !bounds.latest) {
-        return Response.json({ start: null, end: null, count: 0, flashes: [] });
+        return Response.json({ start: null, end: null, first: null, last: null, count: 0, flashes: [] });
       }
       start ??= bounds.earliest;
       // `end` is exclusive, so nudge past the final flash to include it.
@@ -62,13 +63,24 @@ export async function GET(request: Request) {
     }
 
     const flashes = await queryFlashes({ start, end, limit });
+    const first = flashes[0].flash_time;
+    const last = flashes[flashes.length - 1].flash_time;
+
     return Response.json(
-      { start, end, count: flashes.length, truncated: flashes.length === (limit ?? MAX_LIMIT), flashes },
-      { headers: { "Cache-Control": "public, max-age=300" } },
+      {
+        start,
+        end,
+        first,
+        last,
+        count: flashes.length,
+        truncated: flashes.length === (limit ?? MAX_LIMIT),
+        flashes,
+      },
+      { headers: { 'Cache-Control': 'public, max-age=300' } },
     );
   } catch (error) {
     // Never surface driver errors to the client — they leak schema and host.
-    console.error("[/api/flashes]", error);
-    return Response.json({ error: "Failed to query flashes." }, { status: 500 });
+    console.error('[/api/flashes]', error);
+    return Response.json({ error: 'Failed to query flashes.' }, { status: 500 });
   }
 }

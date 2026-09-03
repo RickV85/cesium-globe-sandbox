@@ -1,10 +1,10 @@
-import { getSql } from "./db";
-import type { Bounds, Flash } from "./types";
-
-export type { Bounds, Flash };
+import { MAX_LIMIT } from '@/constants';
+import { getSql } from './db';
+import type { Bounds, Flash } from './types';
 
 export const DEFAULT_SATELLITE = 19;
-export const MAX_LIMIT = 5_000; // reduced to 5, page loading issues
+
+export type { Bounds, Flash };
 
 /*
  * A note on the to_char() calls below.
