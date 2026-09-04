@@ -63,9 +63,9 @@ export default function FlashWindowPicker({
   };
 
   return (
-    <section className={sharedStyles.section}>
+    <section className={styles.timeWindowSection}>
       <h2>Time window playback range</h2>
-      <div className={styles.windowPickerAndInfo}>
+      <div className={styles.windowInfo}>
         <p className={sharedStyles.hint}>
           Flashes in window: <span className={sharedStyles.count}>{isLoading ? '…' : currentFlashCount}</span>
         </p>
@@ -98,7 +98,7 @@ export default function FlashWindowPicker({
           min={0}
         />
       </label>
-      <div className={styles.windowPickerAndInfo}>
+      <div className={styles.windowButtonGroup}>
         <Button
           disabled={!isTimeWindowEnabled}
           variant="outlined"

@@ -8,7 +8,7 @@ interface Props {
 export default function SummaryDisplay({ data }: Props) {
   if (!data) return undefined;
   return (
-    <div style={{ margin: '12px 0px' }}>
+    <div style={{ margin: '0.5rem 0 0.75rem 0' }}>
       <h2>Summary of selected flash data</h2>
       <div className={sharedStyles.tableWrap}>
         <table className={sharedStyles.table}>

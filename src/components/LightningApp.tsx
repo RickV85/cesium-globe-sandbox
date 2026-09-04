@@ -260,7 +260,7 @@ export default function LightningApp() {
       <aside className={styles.panel}>
         <header className={styles.header}>
           <h1>GOES-19 Lightning Flashes</h1>
-          <h2>GLM flash detections over the Northern Rockies</h2>
+          <h2 style={{ marginBottom: '0' }}>GLM flash detections over the Northern Rockies</h2>
         </header>
         <section className={styles.section}>
           <h2>Flash data range (UTC)</h2>
