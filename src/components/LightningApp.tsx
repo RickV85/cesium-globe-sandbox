@@ -3,11 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
 
-import { flashKey, type Bounds, type Flash, type FlashesResponse } from '@/lib/types';
+import {
+  DateInputState,
+  ErrorState,
+  flashKey,
+  type Bounds,
+  type Flash,
+  type FlashesResponse,
+} from '@/lib/types';
 import type { FocusRequest } from './LightningGlobe';
 import styles from './LightningApp.module.css';
-import DateInput from './DateInput';
-import TimeInput from './TimeInput';
+import DateTimeInput from './DateTimeInput';
 import FlashWindowPicker from './FlashWindowPicker';
 import { MAX_LIMIT } from '@/constants';
 
@@ -21,8 +27,6 @@ const LightningGlobe = dynamic(() => import('./LightningGlobe'), {
 /** Stable empty array: `?? []` would allocate per render and break memo deps. */
 const NO_FLASHES: Flash[] = [];
 
-const INITIAL_TIME_STATE = { start: '00:00', end: '23:59' };
-
 /** "2026-08-01T00:00:03.447777Z" -> "00:00:03.447" */
 function clockTime(iso: string): string {
   return iso.slice(11, 23);
@@ -32,35 +36,15 @@ function formatEnergy(j: number | null): string {
   return j === null ? '—' : j.toExponential(2);
 }
 
-export const formatToDateString = (dateTimeString: string | null | undefined) => {
-  if (!dateTimeString) return 'unknown date';
-  return new Date(dateTimeString).toLocaleDateString('fr-CA', { timeZone: 'UTC' });
+export const removeMsFromIsoString = (isoString: string | null | undefined) => {
+  if (!isoString) return '';
+  return isoString.slice(0, 19);
 };
 
-const formatIsoDateTime = (dateTimeString: string | null | undefined) => {
+const formatIsoDateTimeForDisplay = (dateTimeString: string | null | undefined) => {
   if (!dateTimeString) return 'unknown date';
   return new Date(dateTimeString).toLocaleString('en-US', { timeZone: 'UTC' });
 };
-
-export type DateValue = string;
-export type DateInputState = { start: DateValue; end: DateValue };
-export type TimeValue = string;
-export type TimeInputState = { start: TimeValue; end: TimeValue };
-
-export type ErrorState = {
-  dateErr?: string;
-  fetchErr?: string;
-  flashWinErr?: string;
-};
-
-/**
- * One ISO-8601 UTC instant from a date and a time input, or null if either is
- * still empty. Both controls constrain their own format, so the only thing
- * worth checking is that they have been filled in. `type="time"` yields
- * "HH:MM", or "HH:MM:SS" when its step is under a minute.
- */
-const toIsoUtc = (date: DateValue, time: TimeValue): string | null =>
-  date && time ? `${date}T${time.length === 5 ? `${time}:00` : time}Z` : null;
 
 const getBrowserTzOffset = () => {
   const utcOffsetInMinutes = new Date().getTimezoneOffset();
@@ -77,7 +61,6 @@ export default function LightningApp() {
     start: '',
     end: '',
   });
-  const [timeInputState, setTimeInputState] = useState(INITIAL_TIME_STATE);
   const [applied, setApplied] = useState<{ start: string; end: string } | null>(null);
 
   const [windowSeconds, setWindowSeconds] = useState(TEN_MIN_IN_SEC);
@@ -106,8 +89,8 @@ export default function LightningApp() {
 
   const setFormattedDateState = ({ start, end }: { start: string; end: string }): void =>
     setDateInputState({
-      start: formatToDateString(start),
-      end: formatToDateString(end),
+      start: removeMsFromIsoString(start),
+      end: removeMsFromIsoString(end),
     });
 
   const tzOffset = useSyncExternalStore(
@@ -188,27 +171,26 @@ export default function LightningApp() {
   const loading = !hasError && (bounds === null || (windowKey !== null && fresh === null));
 
   const apply = useCallback(() => {
-    const start = toIsoUtc(dateInputState.start, timeInputState.start);
-    const end = toIsoUtc(dateInputState.end, timeInputState.end);
+    const startTime = new Date(dateInputState.start).getTime();
+    const endTime = new Date(dateInputState.end).getTime();
 
-    if (!start || !end) {
+    if (!startTime || !endTime) {
       setErrorState((prev) => ({ ...prev, dateErr: 'Pick a date and a time for both ends of the window.' }));
       return;
     }
-    // Fixed-width ISO UTC, so string order is chronological order.
-    if (end <= start) {
+    if (endTime <= startTime) {
       setErrorState((prev) => ({ ...prev, dateErr: 'End must be after start.' }));
       return;
     }
     setErrorState((prev) => ({ ...prev, dateErr: '' }));
-    setApplied({ start, end });
-  }, [dateInputState, timeInputState]);
+    // Add Z for UTZ / Zulu time
+    setApplied({ start: dateInputState.start.concat('Z'), end: dateInputState.end.concat('Z') });
+  }, [dateInputState]);
 
   const resetWindow = useCallback(() => {
     if (!bounds?.earliest || !bounds.latest) return;
     const end = new Date(Date.parse(bounds.latest) + 1000).toISOString();
     setFormattedDateState({ start: bounds.earliest, end: bounds.latest });
-    setTimeInputState(INITIAL_TIME_STATE);
     setApplied({ start: bounds.earliest, end });
   }, [bounds]);
 
@@ -256,20 +238,20 @@ export default function LightningApp() {
           <h2>GLM flash detections over the Northern Rockies</h2>
         </header>
         <section className={styles.section}>
-          <h2>Date and Time window (UTC)</h2>
+          <h2>Flash data range (UTC)</h2>
           {bounds?.earliest && (
             <p className={styles.hint}>
-              Dataset holds {bounds.count} flash records, between {bounds.earliest.slice(0, 10)} and{' '}
+              Database holds {bounds.count} flash records between {bounds.earliest.slice(0, 10)} and{' '}
               {bounds.latest?.slice(0, 10)}.
             </p>
           )}
-          <DateInput
+          <DateTimeInput
+            min={removeMsFromIsoString(bounds?.earliest)}
+            max={removeMsFromIsoString(bounds?.latest)}
+            tzOffset={tzOffset}
             value={dateInputState}
-            onChange={setFormattedDateState}
-            min={bounds?.earliest ? formatToDateString(bounds.earliest) : ''}
-            max={bounds?.latest ? formatToDateString(bounds.latest) : ''}
+            onChange={setDateInputState}
           />
-          <TimeInput tzOffset={tzOffset} value={timeInputState} onChange={setTimeInputState} />
           <div className={styles.buttonRow}>
             <button type="button" className={styles.primary} onClick={apply} disabled={loading}>
               Apply
@@ -292,8 +274,9 @@ export default function LightningApp() {
           {errorDisplay}
           {result && truncated && (
             <p className={styles.warning}>
-              WARNING - Only the first {MAX_LIMIT} flash results between {formatIsoDateTime(result.first)} and{' '}
-              {formatIsoDateTime(result.last)} are being displayed below and on the map.
+              WARNING - Only the first {MAX_LIMIT} flash results between (
+              {formatIsoDateTimeForDisplay(result.first)}) and ({formatIsoDateTimeForDisplay(result.last)})
+              are being displayed below and on the map.
             </p>
           )}
           {/* {summary && (

@@ -44,3 +44,12 @@ export type FlashesResponse = {
   truncated?: boolean;
   flashes: Flash[];
 };
+
+export type DateValue = string;
+export type DateInputState = { start: DateValue; end: DateValue };
+
+export type ErrorState = {
+  dateErr?: string;
+  fetchErr?: string;
+  flashWinErr?: string;
+};

@@ -1,11 +1,12 @@
 import styles from './FlashWindowPicker.module.css';
 import { useContext, useState } from 'react';
 import type { Dispatch } from 'react';
-import { ErrorState, TEN_MIN_IN_SEC } from './LightningApp';
+import { TEN_MIN_IN_SEC } from './LightningApp';
 import sharedStyles from './LightningApp.module.css';
 import { Button } from '@mui/material';
 import clsx from 'clsx';
 import { AppContext } from '@/app/contexts/AppContext';
+import { ErrorState } from '@/lib/types';
 
 interface Props {
   windowSeconds: number;
@@ -54,7 +55,7 @@ export default function FlashWindowPicker({ windowSeconds, setErrorState, setWin
 
   return (
     <section className={sharedStyles.section}>
-      <h2>Select playback window for timeline playback in minutes</h2>
+      <h2>Time window playback range</h2>
       <p className={sharedStyles.hint}>
         {isTimeWindowEnabled ? 'Current window length:' : 'Time window disabled'}
         {isTimeWindowEnabled && (
@@ -89,7 +90,7 @@ export default function FlashWindowPicker({ windowSeconds, setErrorState, setWin
           classes={{ root: clsx(sharedStyles.button, sharedStyles.primary, styles.timeWindowButton) }}
           onClick={handleTimeWindowUpdate}
         >
-          Apply Time Window
+          Apply time window
         </Button>
         <Button
           variant="outlined"
