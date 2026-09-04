@@ -9,9 +9,11 @@ import { AppContext } from '@/app/contexts/AppContext';
 import { ErrorState } from '@/lib/types';
 
 interface Props {
-  windowSeconds: number;
+  currentFlashCount: number;
+  isLoading: boolean;
   setErrorState: Dispatch<React.SetStateAction<ErrorState>>;
   setWindowSeconds: (newNumSeconds: number) => void;
+  windowSeconds: number;
 }
 
 const ONE_MIN = 60;
@@ -22,9 +24,16 @@ const convertWinSecForDisplay = (winSec: number) => {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 };
 
-export default function FlashWindowPicker({ windowSeconds, setErrorState, setWindowSeconds }: Props) {
+export default function FlashWindowPicker({
+  currentFlashCount,
+  isLoading,
+  setErrorState,
+  setWindowSeconds,
+  windowSeconds,
+}: Props) {
   const { isTimeWindowEnabled, setIsTimeWindowEnabled } = useContext(AppContext);
   const [hours, setHours] = useState<number>(0);
+  // Maybe should make this default state calc'd on the initial data set for better UX
   const [minutes, setMinutes] = useState<number>(TEN_MIN_IN_SEC / 60);
 
   const handleTimeWindowUpdate = () => {
@@ -56,12 +65,18 @@ export default function FlashWindowPicker({ windowSeconds, setErrorState, setWin
   return (
     <section className={sharedStyles.section}>
       <h2>Time window playback range</h2>
-      <p className={sharedStyles.hint}>
-        {isTimeWindowEnabled ? 'Current window length:' : 'Time window disabled'}
-        {isTimeWindowEnabled && (
-          <span className={sharedStyles.count}>{convertWinSecForDisplay(windowSeconds)}</span>
-        )}
-      </p>
+      <div className={styles.windowPickerAndInfo}>
+        <p className={sharedStyles.hint}>
+          Flashes in window: <span className={sharedStyles.count}>{isLoading ? '…' : currentFlashCount}</span>
+        </p>
+        <p>|</p>
+        <p className={sharedStyles.hint}>
+          {isTimeWindowEnabled ? 'Current window length:' : 'Time window disabled'}
+          {isTimeWindowEnabled && (
+            <span className={sharedStyles.count}>{convertWinSecForDisplay(windowSeconds)}</span>
+          )}
+        </p>
+      </div>
       <label className={sharedStyles.field}>
         <span>Hours</span>
         <input

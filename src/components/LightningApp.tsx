@@ -70,7 +70,7 @@ export default function LightningApp() {
   /**
    * The last completed fetch, tagged with the window it belongs to.
    *
-   * Holding the result this way lets `loading` and `flashes` be derived rather
+   * Holding the result this way lets `isLoading` and `flashes` be derived rather
    * than stored, which keeps every setState inside an async continuation --
    * synchronously setting state in an effect body triggers cascading renders.
    */
@@ -170,7 +170,7 @@ export default function LightningApp() {
   const fresh = result?.key === windowKey ? result : null;
   const flashes = fresh?.flashes ?? NO_FLASHES;
   const truncated = fresh?.truncated ?? false;
-  const loading = !hasError && (bounds === null || (windowKey !== null && fresh === null));
+  const isLoading = !hasError && (bounds === null || (windowKey !== null && fresh === null));
 
   const apply = useCallback(() => {
     const startTime = new Date(dateInputState.start).getTime();
@@ -212,15 +212,45 @@ export default function LightningApp() {
 
   const summaryData: Summary = useMemo(() => {
     if (!flashes.length) return null;
-    const energies = flashes.map((f) => f.energy_j ?? 0).filter(Boolean);
+
+    const resultData = flashes.reduce(
+      (result: Record<string, number>, f) => {
+        if (f.energy_j && f.energy_j > 0) {
+          result.totalEnergy += f.energy_j;
+          if (result.peakEnergy < f.energy_j) {
+            result.peakEnergy = f.energy_j;
+          }
+          result.countEnergy++;
+        }
+        if (f.area_km2 && f.area_km2 > 0) {
+          result.totalArea += f.area_km2;
+          if (result.peakArea < f.area_km2) {
+            result.peakArea = f.area_km2;
+          }
+          result.countArea++;
+        }
+
+        return result;
+      },
+      { peakEnergy: 0, totalEnergy: 0, countEnergy: 0, peakArea: 0, totalArea: 0, countArea: 0 },
+    );
+
     return {
       peakEnergy: {
         displayName: 'Peak energy',
-        value: energies.length
-          ? `${Math.max(...energies)
-              .toExponential(2)
-              .toString()} J`
-          : null,
+        value: `${resultData.peakEnergy.toExponential(2).toString()} J`,
+      },
+      averageEnergy: {
+        displayName: 'Average energy',
+        value: `${(resultData.totalEnergy / resultData.countEnergy).toExponential(2)} J`,
+      },
+      peakArea: {
+        displayName: 'Peak area',
+        value: `${resultData.peakArea.toFixed(0)} km²`,
+      },
+      averageArea: {
+        displayName: 'Average area',
+        value: `${(resultData.totalArea / resultData.countArea).toFixed(0)} km²²`,
       },
     };
   }, [flashes]);
@@ -260,7 +290,7 @@ export default function LightningApp() {
             onChange={setDateInputState}
           />
           <div className={styles.buttonRow}>
-            <button type="button" className={styles.primary} onClick={apply} disabled={loading}>
+            <button type="button" className={styles.primary} onClick={apply} disabled={isLoading}>
               Apply
             </button>
             <button type="button" className={styles.button} onClick={resetWindow} disabled={!bounds}>
@@ -268,16 +298,14 @@ export default function LightningApp() {
             </button>
           </div>
           <FlashWindowPicker
-            windowSeconds={windowSeconds}
+            currentFlashCount={flashes.length}
+            isLoading={isLoading}
             setWindowSeconds={setWindowSeconds}
             setErrorState={setErrorState}
+            windowSeconds={windowSeconds}
           />
         </section>
         <section className={styles.sectionGrow}>
-          <h2>
-            Flashes in date / time window:{' '}
-            <span className={styles.count}>{loading ? '…' : flashes.length}</span>
-          </h2>
           {errorDisplay}
           {result && truncated && (
             <p className={styles.warning}>
@@ -320,7 +348,7 @@ export default function LightningApp() {
                     </tr>
                   );
                 })}
-                {!loading && !flashes.length && !hasError && (
+                {!isLoading && !flashes.length && !hasError && (
                   <tr>
                     <td colSpan={5} className={styles.empty}>
                       No flashes in this window.
