@@ -236,22 +236,10 @@ export default function LightningApp() {
     );
 
     return {
-      peakEnergy: {
-        displayName: 'Peak energy',
-        value: `${resultData.peakEnergy.toExponential(2).toString()} J`,
-      },
-      averageEnergy: {
-        displayName: 'Average energy',
-        value: `${(resultData.totalEnergy / resultData.countEnergy).toExponential(2)} J`,
-      },
-      peakArea: {
-        displayName: 'Peak area',
-        value: `${resultData.peakArea.toFixed(0)} km²`,
-      },
-      averageArea: {
-        displayName: 'Average area',
-        value: `${(resultData.totalArea / resultData.countArea).toFixed(0)} km²²`,
-      },
+      peakEnergy: `${resultData.peakEnergy.toExponential(2).toString()} J`,
+      averageEnergy: `${(resultData.totalEnergy / resultData.countEnergy).toExponential(2)} J`,
+      peakArea: `${resultData.peakArea.toFixed(0)} km²`,
+      averageArea: `${(resultData.totalArea / resultData.countArea).toFixed(0)} km²`,
     };
   }, [flashes]);
 
@@ -315,6 +303,7 @@ export default function LightningApp() {
             </p>
           )}
           <SummaryDisplay data={summaryData} />
+          <h2>Selected flash data</h2>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <thead>

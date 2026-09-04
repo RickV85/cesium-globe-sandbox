@@ -54,9 +54,6 @@ export type ErrorState = {
   flashWinErr?: string;
 };
 
-export type SummaryDataType = {
-  displayName: string;
-  value: string | null | undefined;
-};
+type DataTypeNames = ['peakEnergy' | 'averageEnergy' | 'peakArea' | 'averageArea'];
 
-export type Summary = Record<string, SummaryDataType> | null;
+export type Summary = Record<DataTypeNames[number], string> | null;
