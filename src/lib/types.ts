@@ -53,3 +53,10 @@ export type ErrorState = {
   fetchErr?: string;
   flashWinErr?: string;
 };
+
+export type SummaryDataType = {
+  displayName: string;
+  value: string | null | undefined;
+};
+
+export type Summary = Record<string, SummaryDataType> | null;

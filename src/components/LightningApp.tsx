@@ -7,6 +7,7 @@ import {
   DateInputState,
   ErrorState,
   flashKey,
+  type Summary,
   type Bounds,
   type Flash,
   type FlashesResponse,
@@ -16,6 +17,7 @@ import styles from './LightningApp.module.css';
 import DateTimeInput from './DateTimeInput';
 import FlashWindowPicker from './FlashWindowPicker';
 import { MAX_LIMIT } from '@/constants';
+import SummaryDisplay from './Summary';
 
 // Cesium touches `window` on import, so the globe can never render on the
 // server. Everything else on this page is happy to.
@@ -208,15 +210,20 @@ export default function LightningApp() {
     }
   }, []);
 
-  // const summary = useMemo(() => {
-  //   if (!flashes.length) return null;
-  //   const energies = flashes.map((f) => f.energy_j ?? 0).filter(Boolean);
-  //   return {
-  //     first: flashes[0].flash_time,
-  //     last: flashes[flashes.length - 1].flash_time,
-  //     peak: energies.length ? Math.max(...energies) : null,
-  //   };
-  // }, [flashes]);
+  const summaryData: Summary = useMemo(() => {
+    if (!flashes.length) return null;
+    const energies = flashes.map((f) => f.energy_j ?? 0).filter(Boolean);
+    return {
+      peakEnergy: {
+        displayName: 'Peak energy',
+        value: energies.length
+          ? `${Math.max(...energies)
+              .toExponential(2)
+              .toString()} J`
+          : null,
+      },
+    };
+  }, [flashes]);
 
   const errorDisplay = useMemo(
     () =>
@@ -279,13 +286,7 @@ export default function LightningApp() {
               are being displayed below and on the map.
             </p>
           )}
-          {/* {summary && (
-            <p className={styles.hint}>
-              {clockTime(summary.first)} – {clockTime(summary.last)}
-              {summary.peak ? `, peak ${summary.peak.toExponential(2)} J` : ''}
-            </p>
-          )} */}
-
+          <SummaryDisplay data={summaryData} />
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <thead>
