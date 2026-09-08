@@ -1,7 +1,7 @@
 import styles from './FlashWindowPicker.module.css';
 import { useContext, useState } from 'react';
 import type { Dispatch } from 'react';
-import { TEN_MIN_IN_SEC } from './LightningApp';
+import { TEN_MIN_IN_SEC } from '@/constants';
 import sharedStyles from './LightningApp.module.css';
 import { Button } from '@mui/material';
 import clsx from 'clsx';

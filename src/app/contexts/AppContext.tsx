@@ -6,11 +6,8 @@ export type AppContext = {
   setIsTimeWindowEnabled: (newValue: boolean) => void;
 };
 
-const defaultState: {
-  isTimeWindowEnabled: boolean;
-  setIsTimeWindowEnabled: (newValue: boolean) => void;
-} = {
-  isTimeWindowEnabled: true,
+const defaultState: AppContext = {
+  isTimeWindowEnabled: false,
   setIsTimeWindowEnabled: () => undefined,
 };
 

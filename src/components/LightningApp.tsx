@@ -16,7 +16,7 @@ import type { FocusRequest } from './LightningGlobe';
 import styles from './LightningApp.module.css';
 import DateTimeInput from './DateTimeInput';
 import FlashWindowPicker from './FlashWindowPicker';
-import { MAX_LIMIT } from '@/constants';
+import { MAX_LIMIT, ONE_DAY_IN_MS, TEN_MIN_IN_SEC } from '@/constants';
 import SummaryDisplay from './Summary';
 
 // Cesium touches `window` on import, so the globe can never render on the
@@ -54,8 +54,6 @@ const getBrowserTzOffset = () => {
   const utcOffsetInHours = -utcOffsetInMinutes / 60; // invert due to getTimezone offset returning inverted values by default
   return `${utcOffsetInHours} hours`;
 };
-
-export const TEN_MIN_IN_SEC = 600;
 
 export default function LightningApp() {
   const [bounds, setBounds] = useState<Bounds | null>(null);
@@ -101,7 +99,13 @@ export default function LightningApp() {
     () => 'unknown', // server snapshot
   );
 
-  // Discover the window the data actually covers, and open on it.
+  const setAppliedToFullExtent = useCallback((bounds: Bounds | null) => {
+    if (!bounds?.earliest || !bounds.latest) return;
+    const end = new Date(Date.parse(bounds.latest) + 1000).toISOString();
+    setApplied({ start: bounds.earliest, end });
+    setFormattedDateState({ start: bounds.earliest, end: bounds.latest });
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -112,10 +116,18 @@ export default function LightningApp() {
         if (cancelled) return;
         setBounds(data);
         if (data.earliest && data.latest) {
+          const latestEpoch = Date.parse(data.latest);
           // `end` is exclusive, so nudge past the final flash to include it.
-          const end = new Date(Date.parse(data.latest) + 1000).toISOString();
-          setApplied({ start: data.earliest, end });
-          setFormattedDateState({ start: data.earliest, end: data.latest });
+          const earliestEpoch = Date.parse(data.earliest);
+
+          if (latestEpoch - ONE_DAY_IN_MS > earliestEpoch) {
+            // Set start to latest flash time minus 24 hours
+            const start = new Date(latestEpoch - ONE_DAY_IN_MS).toISOString();
+            setApplied({ start, end: new Date(latestEpoch + 1000).toISOString() });
+            setFormattedDateState({ start, end: data.latest });
+          } else {
+            setAppliedToFullExtent(data);
+          }
         }
       } catch (cause) {
         if (!cancelled)
@@ -130,7 +142,7 @@ export default function LightningApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [setAppliedToFullExtent]);
 
   const windowKey = applied ? `${applied.start}|${applied.end}` : null;
 
@@ -188,13 +200,6 @@ export default function LightningApp() {
     // Add Z for UTZ / Zulu time
     setApplied({ start: dateInputState.start.concat('Z'), end: dateInputState.end.concat('Z') });
   }, [dateInputState]);
-
-  const resetWindow = useCallback(() => {
-    if (!bounds?.earliest || !bounds.latest) return;
-    const end = new Date(Date.parse(bounds.latest) + 1000).toISOString();
-    setFormattedDateState({ start: bounds.earliest, end: bounds.latest });
-    setApplied({ start: bounds.earliest, end });
-  }, [bounds]);
 
   const focusFlash = useCallback((flash: Flash) => {
     setSelected(flash);
@@ -281,7 +286,12 @@ export default function LightningApp() {
             <button type="button" className={styles.primary} onClick={apply} disabled={isLoading}>
               Apply
             </button>
-            <button type="button" className={styles.button} onClick={resetWindow} disabled={!bounds}>
+            <button
+              type="button"
+              className={styles.button}
+              onClick={() => setAppliedToFullExtent(bounds)}
+              disabled={!bounds}
+            >
               Full extent
             </button>
           </div>

@@ -1,1 +1,4 @@
-export const MAX_LIMIT = 500; // reduced to 500, page speed issues I need to look in to
+export const MAX_LIMIT = 100_000;
+
+export const ONE_DAY_IN_MS = 86400000;
+export const TEN_MIN_IN_SEC = 600;
