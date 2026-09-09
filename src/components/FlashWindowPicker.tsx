@@ -9,8 +9,6 @@ import { AppContext } from '@/app/contexts/AppContext';
 import { ErrorState } from '@/lib/types';
 
 interface Props {
-  currentFlashCount: number;
-  isLoading: boolean;
   setErrorState: Dispatch<React.SetStateAction<ErrorState>>;
   setWindowSeconds: (newNumSeconds: number) => void;
   windowSeconds: number;
@@ -24,13 +22,7 @@ const convertWinSecForDisplay = (winSec: number) => {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 };
 
-export default function FlashWindowPicker({
-  currentFlashCount,
-  isLoading,
-  setErrorState,
-  setWindowSeconds,
-  windowSeconds,
-}: Props) {
+export default function FlashWindowPicker({ setErrorState, setWindowSeconds, windowSeconds }: Props) {
   const { isTimeWindowEnabled, setIsTimeWindowEnabled } = useContext(AppContext);
   const [hours, setHours] = useState<number>(0);
   // Maybe should make this default state calc'd on the initial data set for better UX
@@ -65,12 +57,8 @@ export default function FlashWindowPicker({
   return (
     <section className={styles.timeWindowSection}>
       <h2>Time window playback range</h2>
-      <div className={styles.windowInfo}>
-        <p className={sharedStyles.hint}>
-          Flashes in window: <span className={sharedStyles.count}>{isLoading ? '…' : currentFlashCount}</span>
-        </p>
-        <p>|</p>
-        <p className={sharedStyles.hint}>
+      <div>
+        <p className={clsx(styles.windowInfo, sharedStyles.hint)}>
           {isTimeWindowEnabled ? 'Current window length:' : 'Time window disabled'}
           {isTimeWindowEnabled && (
             <span className={sharedStyles.count}>{convertWinSecForDisplay(windowSeconds)}</span>

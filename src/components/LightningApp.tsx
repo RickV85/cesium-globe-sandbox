@@ -18,6 +18,7 @@ import DateTimeInput from './DateTimeInput';
 import FlashWindowPicker from './FlashWindowPicker';
 import { MAX_LIMIT, ONE_DAY_IN_MS, TEN_MIN_IN_SEC } from '@/constants';
 import SummaryDisplay from './Summary';
+import { isEqual } from 'lodash';
 
 // Cesium touches `window` on import, so the globe can never render on the
 // server. Everything else on this page is happy to.
@@ -61,9 +62,20 @@ export default function LightningApp() {
     start: '',
     end: '',
   });
-  const [applied, setApplied] = useState<{ start: string; end: string } | null>(null);
-
+  const [applied, setApplied] = useState<DateInputState | null>(null);
   const [windowSeconds, setWindowSeconds] = useState(TEN_MIN_IN_SEC);
+
+  const lastFetchAppliedRef = useRef<DateInputState | null>(null);
+  const lastFetchDateRangeRef = useRef<DateInputState | null>(null);
+  const hasAppliedStateChanged = useMemo(
+    () => lastFetchAppliedRef.current === null || !isEqual(applied, lastFetchAppliedRef.current),
+    [applied],
+  );
+  const hasDateInputStateChanged = useMemo(
+    () => !isEqual(dateInputState, lastFetchDateRangeRef.current),
+    [dateInputState],
+  );
+  console.log({ hasDateInputStateChanged, dateInputState, lfdr: lastFetchDateRangeRef.current });
 
   /**
    * The last completed fetch, tagged with the window it belongs to.
@@ -148,7 +160,7 @@ export default function LightningApp() {
 
   // Fetch flashes for the applied window.
   useEffect(() => {
-    if (!applied || !windowKey) return;
+    if (!applied || !hasAppliedStateChanged || !windowKey) return;
     let cancelled = false;
 
     (async () => {
@@ -163,6 +175,8 @@ export default function LightningApp() {
         setResult({ key: windowKey, flashes, first, last, truncated: Boolean(truncated) });
         setErrorState((prev) => ({ ...prev, fetchErr: '' }));
         setSelected(null);
+        lastFetchAppliedRef.current = applied;
+        lastFetchDateRangeRef.current = dateInputState;
       } catch (cause) {
         if (!cancelled)
           setErrorState((prev) => {
@@ -177,7 +191,7 @@ export default function LightningApp() {
     return () => {
       cancelled = true;
     };
-  }, [applied, windowKey]);
+  }, [applied, dateInputState, hasAppliedStateChanged, windowKey]);
 
   const fresh = result?.key === windowKey ? result : null;
   const flashes = fresh?.flashes ?? NO_FLASHES;
@@ -283,7 +297,12 @@ export default function LightningApp() {
             onChange={setDateInputState}
           />
           <div className={styles.buttonRow}>
-            <button type="button" className={styles.primary} onClick={apply} disabled={isLoading}>
+            <button
+              type="button"
+              className={styles.primary}
+              onClick={apply}
+              disabled={isLoading || !hasDateInputStateChanged}
+            >
               Apply
             </button>
             <button
@@ -296,8 +315,6 @@ export default function LightningApp() {
             </button>
           </div>
           <FlashWindowPicker
-            currentFlashCount={flashes.length}
-            isLoading={isLoading}
             setWindowSeconds={setWindowSeconds}
             setErrorState={setErrorState}
             windowSeconds={windowSeconds}
@@ -312,7 +329,7 @@ export default function LightningApp() {
               are being displayed below and on the map.
             </p>
           )}
-          <SummaryDisplay data={summaryData} />
+          <SummaryDisplay data={summaryData} flashCount={flashes.length} isLoading={isLoading} />
           <h2>Selected flash data</h2>
           <div className={styles.tableWrap}>
             <table className={styles.table}>

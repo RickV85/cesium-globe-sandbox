@@ -6,15 +6,15 @@
   margin-top: 1rem;
 }
 
-.windowInfo p {
-  margin: .25rem 0 .5rem 0;
+.windowInfo {
+  margin: 0.25rem 0 0.5rem 0;
 }
 
 .windowButtonGroup {
   margin: 0.75rem 0 0.5rem 0;
 }
 
-.windowInfo, .windowButtonGroup {
+.windowButtonGroup {
   align-items: center;
   display: flex;
   gap: 6px;
