@@ -39,10 +39,28 @@ function formatEnergy(j: number | null): string {
   return j === null ? '—' : j.toExponential(2);
 }
 
+function addOneSecondToDateTime(date: string | number, isUtc = false) {
+  if (!date) return '';
+  const parsedDate = typeof date === 'string' ? Date.parse(isUtc ? date + 'Z' : date) : date;
+  return new Date(parsedDate + 1000).toISOString();
+}
+
 export const removeMsFromIsoString = (isoString: string | null | undefined) => {
   if (!isoString) return '';
   return isoString.slice(0, 19);
 };
+
+function createFormattedDateInputState(dtInputState: DateInputState, addZ = false): DateInputState {
+  const formatted = {
+    start: removeMsFromIsoString(dtInputState.start),
+    end: removeMsFromIsoString(dtInputState.end),
+  };
+  if (addZ) {
+    formatted.start += 'Z';
+    formatted.end += 'Z';
+  }
+  return formatted;
+}
 
 const formatIsoDateTimeForDisplay = (dateTimeString: string | null | undefined) => {
   if (!dateTimeString) return 'unknown date';
@@ -57,26 +75,16 @@ const getBrowserTzOffset = () => {
 };
 
 export default function LightningApp() {
+  const [applied, setApplied] = useState<DateInputState | null>(null);
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [dateInputState, setDateInputState] = useState<DateInputState>({
     start: '',
     end: '',
   });
-  const [applied, setApplied] = useState<DateInputState | null>(null);
+  const [errorState, setErrorState] = useState<ErrorState>({});
+  const [focus, setFocus] = useState<FocusRequest | null>(null);
+  const [selected, setSelected] = useState<Flash | null>(null);
   const [windowSeconds, setWindowSeconds] = useState(TEN_MIN_IN_SEC);
-
-  const lastFetchAppliedRef = useRef<DateInputState | null>(null);
-  const lastFetchDateRangeRef = useRef<DateInputState | null>(null);
-  const hasAppliedStateChanged = useMemo(
-    () => lastFetchAppliedRef.current === null || !isEqual(applied, lastFetchAppliedRef.current),
-    [applied],
-  );
-  const hasDateInputStateChanged = useMemo(
-    () => !isEqual(dateInputState, lastFetchDateRangeRef.current),
-    [dateInputState],
-  );
-  console.log({ hasDateInputStateChanged, dateInputState, lfdr: lastFetchDateRangeRef.current });
-
   /**
    * The last completed fetch, tagged with the window it belongs to.
    *
@@ -91,19 +99,30 @@ export default function LightningApp() {
     last: FlashesResponse['last'];
     truncated: boolean;
   } | null>(null);
-  const [errorState, setErrorState] = useState<ErrorState>({});
-  const [selected, setSelected] = useState<Flash | null>(null);
-  const [focus, setFocus] = useState<FocusRequest | null>(null);
+
+  // Refs
   const nonce = useRef(0);
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+  const prevFetchAppliedRef = useRef<DateInputState | null>(null);
 
+  // Variables
+  const windowKey = applied ? `${applied.start}|${applied.end}` : null;
+  const dateInputStateAsAppliedTimeWindow =
+    !dateInputState.start || !dateInputState.end
+      ? null
+      : createFormattedDateInputState(
+          {
+            start: dateInputState.start,
+            end: addOneSecondToDateTime(dateInputState.end, true),
+          },
+          true,
+        );
+  const hasAppliedBeenFetched = isEqual(prevFetchAppliedRef.current, dateInputStateAsAppliedTimeWindow);
   const hasError = Object.values(errorState).some((msg) => !!msg);
-
-  const setFormattedDateState = ({ start, end }: { start: string; end: string }): void =>
-    setDateInputState({
-      start: removeMsFromIsoString(start),
-      end: removeMsFromIsoString(end),
-    });
+  const fresh = result?.key === windowKey ? result : null;
+  const flashes = fresh?.flashes ?? NO_FLASHES;
+  const isLoading = !hasError && (bounds === null || (windowKey !== null && fresh === null));
+  const truncated = fresh?.truncated ?? false;
 
   const tzOffset = useSyncExternalStore(
     () => () => {}, // subscribe: value never changes post-mount
@@ -113,11 +132,16 @@ export default function LightningApp() {
 
   const setAppliedToFullExtent = useCallback((bounds: Bounds | null) => {
     if (!bounds?.earliest || !bounds.latest) return;
-    const end = new Date(Date.parse(bounds.latest) + 1000).toISOString();
-    setApplied({ start: bounds.earliest, end });
-    setFormattedDateState({ start: bounds.earliest, end: bounds.latest });
+    setApplied(
+      createFormattedDateInputState(
+        { start: bounds.earliest, end: addOneSecondToDateTime(bounds.latest) },
+        true,
+      ),
+    );
+    setDateInputState(createFormattedDateInputState({ start: bounds.earliest, end: bounds.latest }));
   }, []);
 
+  // Get and set initial bounds, date ranges available
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -135,8 +159,10 @@ export default function LightningApp() {
           if (latestEpoch - ONE_DAY_IN_MS > earliestEpoch) {
             // Set start to latest flash time minus 24 hours
             const start = new Date(latestEpoch - ONE_DAY_IN_MS).toISOString();
-            setApplied({ start, end: new Date(latestEpoch + 1000).toISOString() });
-            setFormattedDateState({ start, end: data.latest });
+            setApplied(
+              createFormattedDateInputState({ start, end: addOneSecondToDateTime(latestEpoch) }, true),
+            );
+            setDateInputState(createFormattedDateInputState({ start, end: data.latest }));
           } else {
             setAppliedToFullExtent(data);
           }
@@ -156,11 +182,9 @@ export default function LightningApp() {
     };
   }, [setAppliedToFullExtent]);
 
-  const windowKey = applied ? `${applied.start}|${applied.end}` : null;
-
   // Fetch flashes for the applied window.
   useEffect(() => {
-    if (!applied || !hasAppliedStateChanged || !windowKey) return;
+    if (!applied || !windowKey || hasAppliedBeenFetched) return;
     let cancelled = false;
 
     (async () => {
@@ -175,28 +199,23 @@ export default function LightningApp() {
         setResult({ key: windowKey, flashes, first, last, truncated: Boolean(truncated) });
         setErrorState((prev) => ({ ...prev, fetchErr: '' }));
         setSelected(null);
-        lastFetchAppliedRef.current = applied;
-        lastFetchDateRangeRef.current = dateInputState;
+        prevFetchAppliedRef.current = applied;
       } catch (cause) {
-        if (!cancelled)
+        if (!cancelled) {
           setErrorState((prev) => {
             return {
               ...prev,
               fetchErr: cause instanceof Error ? cause.message : String(cause),
             };
           });
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [applied, dateInputState, hasAppliedStateChanged, windowKey]);
-
-  const fresh = result?.key === windowKey ? result : null;
-  const flashes = fresh?.flashes ?? NO_FLASHES;
-  const truncated = fresh?.truncated ?? false;
-  const isLoading = !hasError && (bounds === null || (windowKey !== null && fresh === null));
+  }, [applied, hasAppliedBeenFetched, windowKey]);
 
   const apply = useCallback(() => {
     const startTime = new Date(dateInputState.start).getTime();
@@ -210,10 +229,10 @@ export default function LightningApp() {
       setErrorState((prev) => ({ ...prev, dateErr: 'End must be after start.' }));
       return;
     }
-    setErrorState((prev) => ({ ...prev, dateErr: '' }));
-    // Add Z for UTZ / Zulu time
-    setApplied({ start: dateInputState.start.concat('Z'), end: dateInputState.end.concat('Z') });
-  }, [dateInputState]);
+    // Reset date and fetch error state, flashWinErr reset in picker component
+    setErrorState((prev) => ({ ...prev, dateErr: '', fetchErr: '' }));
+    setApplied(dateInputStateAsAppliedTimeWindow);
+  }, [dateInputStateAsAppliedTimeWindow, dateInputState]);
 
   const focusFlash = useCallback((flash: Flash) => {
     setSelected(flash);
@@ -301,7 +320,7 @@ export default function LightningApp() {
               type="button"
               className={styles.primary}
               onClick={apply}
-              disabled={isLoading || !hasDateInputStateChanged}
+              disabled={isLoading || hasAppliedBeenFetched}
             >
               Apply
             </button>
