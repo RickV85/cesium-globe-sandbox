@@ -53,6 +53,12 @@
   color: #93a1ad;
 }
 
+.headerContainer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .section {
   margin-top: 1rem;
 }
@@ -161,7 +167,7 @@
 }
 
 .hint {
-  margin: .5rem 0rem;
+  margin: 0.5rem 0rem;
   color: #93a1ad;
   font-size: 12px;
 }

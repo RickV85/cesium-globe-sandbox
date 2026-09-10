@@ -20,6 +20,7 @@ import { MAX_LIMIT, ONE_DAY_IN_MS, TEN_MIN_IN_SEC } from '@/constants';
 import SummaryDisplay from './Summary';
 import { isEqual } from 'lodash';
 import { useSession } from 'next-auth/react';
+import SignOutButton from './SignOutButton';
 
 // Cesium touches `window` on import, so the globe can never render on the
 // server. Everything else on this page is happy to.
@@ -302,7 +303,10 @@ export default function LightningApp() {
     <div className={styles.shell}>
       <aside className={styles.panel}>
         <header className={styles.header}>
-          <h1>GOES-19 Lightning Flashes</h1>
+          <div className={styles.headerContainer}>
+            <h1>GOES-19 Lightning Flashes</h1>
+            <SignOutButton />
+          </div>
           <h2 style={{ marginBottom: '0' }}>GLM flash detections over the Northern Rockies</h2>
         </header>
         <section className={styles.section}>
