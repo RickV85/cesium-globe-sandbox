@@ -19,6 +19,7 @@ import FlashWindowPicker from './FlashWindowPicker';
 import { MAX_LIMIT, ONE_DAY_IN_MS, TEN_MIN_IN_SEC } from '@/constants';
 import SummaryDisplay from './Summary';
 import { isEqual } from 'lodash';
+import { useSession } from 'next-auth/react';
 
 // Cesium touches `window` on import, so the globe can never render on the
 // server. Everything else on this page is happy to.
@@ -75,6 +76,10 @@ const getBrowserTzOffset = () => {
 };
 
 export default function LightningApp() {
+  const session = useSession();
+  const userGroup = session.data?.user.userGroup;
+  console.log({ userGroup });
+
   const [applied, setApplied] = useState<DateInputState | null>(null);
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const [dateInputState, setDateInputState] = useState<DateInputState>({
