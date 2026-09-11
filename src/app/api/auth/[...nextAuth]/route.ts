@@ -2,6 +2,7 @@ import NextAuth, { User, type AuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { HARDCODED_USERS } from '@/lib/auth/users';
 import { JWT } from 'next-auth/jwt';
+import { ONE_DAY_IN_SEC } from '@/constants';
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -28,6 +29,7 @@ export const authOptions: AuthOptions = {
   ],
   session: {
     strategy: 'jwt',
+    maxAge: ONE_DAY_IN_SEC,
   },
   secret: process.env.NEXTAUTH_SECRET,
   callbacks: {
