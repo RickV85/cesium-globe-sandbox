@@ -1,4 +1,4 @@
-export type UserGroup = 'hike' | 'research';
+export type UserGroup = 'hike' | 'default';
 
 export type HardcodedUser = {
   id: string;
@@ -8,6 +8,6 @@ export type HardcodedUser = {
 };
 
 export const HARDCODED_USERS: HardcodedUser[] = [
-  { id: '1', username: 'hiker', password: 'hiker', userGroup: 'hike' },
-  { id: '2', username: 'researcher', password: 'researcher', userGroup: 'research' },
+  { id: '1', username: 'default', password: 'default', userGroup: 'default' },
+  { id: '2', username: 'hiker', password: 'hiker', userGroup: 'hike' },
 ];

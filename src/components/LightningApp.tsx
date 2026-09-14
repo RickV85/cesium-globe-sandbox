@@ -253,38 +253,7 @@ export default function LightningApp() {
     }
   }, []);
 
-  const summaryData: Summary = useMemo(() => {
-    if (!flashes.length) return null;
 
-    const resultData = flashes.reduce(
-      (result: Record<string, number>, f) => {
-        if (f.energy_j && f.energy_j > 0) {
-          result.totalEnergy += f.energy_j;
-          if (result.peakEnergy < f.energy_j) {
-            result.peakEnergy = f.energy_j;
-          }
-          result.countEnergy++;
-        }
-        if (f.area_km2 && f.area_km2 > 0) {
-          result.totalArea += f.area_km2;
-          if (result.peakArea < f.area_km2) {
-            result.peakArea = f.area_km2;
-          }
-          result.countArea++;
-        }
-
-        return result;
-      },
-      { peakEnergy: 0, totalEnergy: 0, countEnergy: 0, peakArea: 0, totalArea: 0, countArea: 0 },
-    );
-
-    return {
-      peakEnergy: `${resultData.peakEnergy.toExponential(2).toString()} J`,
-      averageEnergy: `${(resultData.totalEnergy / resultData.countEnergy).toExponential(2)} J`,
-      peakArea: `${resultData.peakArea.toFixed(0)} km²`,
-      averageArea: `${(resultData.totalArea / resultData.countArea).toFixed(0)} km²`,
-    };
-  }, [flashes]);
 
   const errorDisplay = useMemo(
     () =>
@@ -357,8 +326,7 @@ export default function LightningApp() {
             </p>
           )}
           <SummaryDisplay
-            data={summaryData}
-            flashCount={flashes.length}
+            flashes={flashes}
             isLoading={isLoading}
             userGroup={userGroup}
           />

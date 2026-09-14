@@ -239,6 +239,19 @@
   background: #151b21;
 }
 
+.tableFixedWidth {
+  table-layout: fixed;
+  text-align: center;
+}
+
+.tableNonInteractive tbody tr {
+  cursor: default;
+}
+
+.tableNonInteractive tbody tr:hover td {
+  background: initial;
+}
+
 .rowSelected td {
   background: #16324a !important;
   color: #cde6fb;
