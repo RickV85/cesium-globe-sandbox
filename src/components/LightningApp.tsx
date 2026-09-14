@@ -17,7 +17,7 @@ import styles from './LightningApp.module.css';
 import DateTimeInput from './DateTimeInput';
 import FlashWindowPicker from './FlashWindowPicker';
 import { MAX_LIMIT, ONE_DAY_IN_MS, TEN_MIN_IN_SEC } from '@/constants';
-import SummaryDisplay from './Summary';
+import SummaryDisplay from './SummaryDisplay';
 import { isEqual } from 'lodash';
 import { useSession } from 'next-auth/react';
 import SignOutButton from './SignOutButton';
@@ -79,7 +79,6 @@ const getBrowserTzOffset = () => {
 export default function LightningApp() {
   const session = useSession();
   const userGroup = session.data?.user.userGroup;
-  console.log({ userGroup });
 
   const [applied, setApplied] = useState<DateInputState | null>(null);
   const [bounds, setBounds] = useState<Bounds | null>(null);
@@ -357,7 +356,12 @@ export default function LightningApp() {
               are being displayed below and on the map.
             </p>
           )}
-          <SummaryDisplay data={summaryData} flashCount={flashes.length} isLoading={isLoading} />
+          <SummaryDisplay
+            data={summaryData}
+            flashCount={flashes.length}
+            isLoading={isLoading}
+            userGroup={userGroup}
+          />
           <h2>Selected flash data</h2>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
