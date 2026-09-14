@@ -32,7 +32,7 @@ test('it should return null if there are no flashes', () => {
   expect(getAverageFlashTime([])).toBeNull();
 });
 
-test.only('it should skip flashes that are not ISO strings', () => {
+test('it should skip flashes that are not ISO strings', () => {
   const badData1 = [
     { flash_time: '2026-08-01T00:00:00.000000Z' },
     { flash_time: 1785542459000 },
