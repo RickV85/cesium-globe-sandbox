@@ -347,7 +347,7 @@ export default function LightningApp() {
                   <tr>
                     <td colSpan={5} className={styles.empty}>
                       {isLive
-                        ? 'No flashes over the Northern Rockies in the live window.'
+                        ? 'No flashes in the live window.'
                         : 'No flashes in this window.'}
                     </td>
                   </tr>
