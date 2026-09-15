@@ -1,26 +1,28 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 
 import {
   DateInputState,
   ErrorState,
   flashKey,
-  type Summary,
   type Bounds,
   type Flash,
   type FlashesResponse,
 } from '@/lib/types';
 import type { FocusRequest } from './LightningGlobe';
 import styles from './LightningApp.module.css';
-import DateTimeInput from './DateTimeInput';
-import FlashWindowPicker from './FlashWindowPicker';
-import { MAX_LIMIT, ONE_DAY_IN_MS, TEN_MIN_IN_SEC } from '@/constants';
+import { LIVE_DEFAULT_RETENTION_SEC, MAX_LIMIT, ONE_DAY_IN_MS, TEN_MIN_IN_SEC } from '@/constants';
 import SummaryDisplay from './SummaryDisplay';
 import { isEqual } from 'lodash';
 import { useSession } from 'next-auth/react';
 import SignOutButton from './SignOutButton';
+import { AppContext } from '@/app/contexts/AppContext';
+import { useLiveFlashes } from '@/hooks/useLiveFlashes';
+import LiveStatus from './LiveStatus';
+import LiveReplayToggle from './LiveReplayToggle';
+import ReplayControls from './ReplayControls';
 
 // Cesium touches `window` on import, so the globe can never render on the
 // server. Everything else on this page is happy to.
@@ -69,16 +71,12 @@ const formatIsoDateTimeForDisplay = (dateTimeString: string | null | undefined) 
   return new Date(dateTimeString).toLocaleString('en-US', { timeZone: 'UTC' });
 };
 
-const getBrowserTzOffset = () => {
-  const utcOffsetInMinutes = new Date().getTimezoneOffset();
-  if (Number.isNaN(utcOffsetInMinutes)) return 'unknown';
-  const utcOffsetInHours = -utcOffsetInMinutes / 60; // invert due to getTimezone offset returning inverted values by default
-  return `${utcOffsetInHours} hours`;
-};
-
 export default function LightningApp() {
   const session = useSession();
   const userGroup = session.data?.user.userGroup;
+  const { isLive } = useContext(AppContext);
+  const [retentionSec, setRetentionSec] = useState(LIVE_DEFAULT_RETENTION_SEC);
+  const live = useLiveFlashes(isLive, retentionSec);
 
   const [applied, setApplied] = useState<DateInputState | null>(null);
   const [bounds, setBounds] = useState<Bounds | null>(null);
@@ -128,11 +126,15 @@ export default function LightningApp() {
   const flashes = fresh?.flashes ?? NO_FLASHES;
   const isLoading = !hasError && (bounds === null || (windowKey !== null && fresh === null));
   const truncated = fresh?.truncated ?? false;
+  const hasBounds = bounds !== null;
 
-  const tzOffset = useSyncExternalStore(
-    () => () => {}, // subscribe: value never changes post-mount
-    () => getBrowserTzOffset(), // client snapshot
-    () => 'unknown', // server snapshot
+  // Live mode only swaps the source; the table, summary and globe don't care where flashes came from.
+  const shownFlashes = isLive ? live.flashes : flashes;
+  const shownLoading = isLive ? !live.status.hasChecked : isLoading;
+  // Newest first in live mode, so fresh flashes land at the top of the table.
+  const tableFlashes = useMemo(
+    () => (isLive ? [...live.flashes].reverse() : flashes),
+    [isLive, live.flashes, flashes],
   );
 
   const setAppliedToFullExtent = useCallback((bounds: Bounds | null) => {
@@ -146,8 +148,9 @@ export default function LightningApp() {
     setDateInputState(createFormattedDateInputState({ start: bounds.earliest, end: bounds.latest }));
   }, []);
 
-  // Get and set initial bounds, date ranges available
+  // Get and set initial bounds, date ranges available. Replay only -- live mode never touches the database.
   useEffect(() => {
+    if (isLive || hasBounds) return;
     let cancelled = false;
     (async () => {
       try {
@@ -185,11 +188,11 @@ export default function LightningApp() {
     return () => {
       cancelled = true;
     };
-  }, [setAppliedToFullExtent]);
+  }, [hasBounds, isLive, setAppliedToFullExtent]);
 
   // Fetch flashes for the applied window.
   useEffect(() => {
-    if (!applied || !windowKey || hasAppliedBeenFetched) return;
+    if (isLive || !applied || !windowKey || hasAppliedBeenFetched) return;
     let cancelled = false;
 
     (async () => {
@@ -220,7 +223,7 @@ export default function LightningApp() {
     return () => {
       cancelled = true;
     };
-  }, [applied, hasAppliedBeenFetched, windowKey]);
+  }, [applied, hasAppliedBeenFetched, isLive, windowKey]);
 
   const apply = useCallback(() => {
     const startTime = new Date(dateInputState.start).getTime();
@@ -253,8 +256,6 @@ export default function LightningApp() {
     }
   }, []);
 
-
-
   const errorDisplay = useMemo(
     () =>
       Object.entries(errorState)
@@ -277,59 +278,41 @@ export default function LightningApp() {
           </div>
           <h2 style={{ marginBottom: '0' }}>GLM flash detections over the Northern Rockies</h2>
         </header>
-        <section className={styles.section}>
-          <h2>Flash data range (UTC)</h2>
-          {bounds?.earliest && (
-            <p className={styles.hint}>
-              Database holds {bounds.count} flash records between {bounds.earliest.slice(0, 10)} and{' '}
-              {bounds.latest?.slice(0, 10)}.
-            </p>
-          )}
-          <DateTimeInput
-            min={removeMsFromIsoString(bounds?.earliest)}
-            max={removeMsFromIsoString(bounds?.latest)}
-            tzOffset={tzOffset}
-            value={dateInputState}
-            onChange={setDateInputState}
-          />
-          <div className={styles.buttonRow}>
-            <button
-              type="button"
-              className={styles.primary}
-              onClick={apply}
-              disabled={isLoading || hasAppliedBeenFetched}
-            >
-              Apply
-            </button>
-            <button
-              type="button"
-              className={styles.button}
-              onClick={() => setAppliedToFullExtent(bounds)}
-              disabled={!bounds}
-            >
-              Full extent
-            </button>
-          </div>
-          <FlashWindowPicker
-            setWindowSeconds={setWindowSeconds}
+        <LiveReplayToggle />
+        {isLive ? (
+          <section className={styles.section}>
+            <LiveStatus
+              status={live.status}
+              retentionSec={retentionSec}
+              onRetentionChange={setRetentionSec}
+            />
+          </section>
+        ) : (
+          <ReplayControls
+            apply={apply}
+            bounds={bounds}
+            dateInputState={dateInputState}
+            hasAppliedBeenFetched={hasAppliedBeenFetched}
+            isLoading={isLoading}
+            setAppliedToFullExtent={setAppliedToFullExtent}
+            setDateInputState={setDateInputState}
             setErrorState={setErrorState}
+            setWindowSeconds={setWindowSeconds}
             windowSeconds={windowSeconds}
           />
-        </section>
+        )}
         <section className={styles.sectionGrow}>
-          {errorDisplay}
-          {result && truncated && (
+          {!isLive && errorDisplay}
+          {!isLive && result && truncated && (
             <p className={styles.warning}>
               WARNING - Only the first {MAX_LIMIT} flash results between (
               {formatIsoDateTimeForDisplay(result.first)}) and ({formatIsoDateTimeForDisplay(result.last)})
               are being displayed below and on the map.
             </p>
           )}
-          <SummaryDisplay
-            flashes={flashes}
-            isLoading={isLoading}
-            userGroup={userGroup}
-          />
+          {!isLive && (
+            <SummaryDisplay flashes={shownFlashes} isLoading={shownLoading} userGroup={userGroup} />
+          )}
           <h2>Selected flash data</h2>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
@@ -343,7 +326,7 @@ export default function LightningApp() {
                 </tr>
               </thead>
               <tbody>
-                {flashes.map((flash) => {
+                {tableFlashes.map((flash) => {
                   const key = flashKey(flash);
                   const isSelected = selected !== null && flashKey(selected) === key;
                   return (
@@ -364,10 +347,12 @@ export default function LightningApp() {
                     </tr>
                   );
                 })}
-                {!isLoading && !flashes.length && !hasError && (
+                {!shownLoading && !shownFlashes.length && (isLive || !hasError) && (
                   <tr>
                     <td colSpan={5} className={styles.empty}>
-                      No flashes in this window.
+                      {isLive
+                        ? 'No flashes over the Northern Rockies in the live window.'
+                        : 'No flashes in this window.'}
                     </td>
                   </tr>
                 )}
@@ -377,7 +362,9 @@ export default function LightningApp() {
         </section>
       </aside>
       <LightningGlobe
-        flashes={flashes}
+        flashes={shownFlashes}
+        isLive={isLive}
+        retentionSec={retentionSec}
         focus={focus}
         onSelect={handleGlobeSelect}
         windowSeconds={windowSeconds}

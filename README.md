@@ -66,12 +66,58 @@ it highlights and scrolls to the row, but deliberately does not move the camera.
 Colour runs a log scale over flash energy (~1e-15 to 1e-12 J — linear would put nearly everything
 at the bottom), and point size follows √area.
 
+## Live mode
+
+The **Live** toggle swaps the database for NOAA's public `noaa-goes19` bucket, read straight from the
+browser. It starts polling when the page loads, so switching to Live shows flashes immediately. No
+server, no ingest, no storage: the bucket answers both listing and downloads with
+`Access-Control-Allow-Origin: *`, so this runs on a static host (Vercel Hobby is enough).
+
+```
+noaa-goes19 S3 (GLM-L2-LCFA, one ~350 KB file / 20 s)
+        |  ListObjectsV2 every 10 s          src/lib/live/glmS3.ts
+        v
+src/lib/live/createLiveFeed.ts  poll from page load, backfill the retention window, keep flashes in memory
+        |  one key at a time
+        v
+src/lib/live/glm.worker.ts   fetch -> h5wasm (readGlmFile.ts) -> decodeGlm.ts -> Flash[]
+        |  flashes back to liveFeed
+        v
+src/hooks/useLiveFlashes.ts  subscribes to liveFeed only while live mode is on
+        |
+        v
+LightningApp / LightningGlobe  same table, summary and globe as replay
+```
+
+- **Latency.** NOAA has no streaming API. Files appear in S3 roughly 8–10 s after the 20 s window
+  they cover ends, so flashes are 10–30 s old when they reach the globe.
+- **Bandwidth.** ~1 MB/min per open tab in either mode. Page load also fetches the ~1 MB (gzipped) HDF5
+  library and backfills the retention window, ~30 MB for the default 30 minutes. Widening the window
+  fetches only the older files it now covers (30 → 60 minutes is another ~30 MB).
+- **Queue order.** Files are decoded newest first, so recent flashes appear before the backfill finishes.
+  The backfill yields every poll interval, so a new file never waits behind it for more than ~10 s.
+- **Why a store, not React state.** Holding live flashes in React state re-rendered the whole app after
+  every file, which stuttered replay playback. `createLiveFeed.ts` keeps them outside React and notifies only
+  on real changes; `useLiveFlashes` subscribes only in live mode, so replay never re-renders on a poll.
+- **The globe clock** runs on `ClockStep.SYSTEM_CLOCK`, and every flash gets an availability window
+  of the retention length, so points expire on their own between polls.
+- **Background tabs** have their timers throttled; returning to the tab triggers a catch-up poll.
+- Checked against the database: decoding `OR_GLM-L2-LCFA_G19_s20262130000000` reproduces both
+  ingested flashes to the microsecond. Energy and area differ past the 8th significant digit,
+  because the Python path lands at float32 precision.
+
 ## Things worth knowing
 
 **`_Unsigned` in GLM files.** Flash times, ids, energies and areas are stored as `int16` but carry
 `_Unsigned = "true"`, so the bits must be read as `uint16`. Over half the time values in a typical
 file are negative when read signed. xarray honours the attribute; **h5py does not**, and silently
 yields times wrong by 65536 × scale_factor = 25.000385 s. This cost real debugging time.
+
+**jsfive silently drops the packing attributes.** It reads the data fine but returns an empty
+`attrs` for `flash_time_offset_of_first_event`, `flash_energy`, `flash_area` and
+`flash_quality_flag` — the variables with enough attributes to use HDF5's dense storage — so every
+value would come out unscaled. Live mode uses h5wasm instead, and `decodeGlm.ts` applies
+`_Unsigned`, `scale_factor`, `add_offset` and `_FillValue` itself (h5wasm, like h5py, applies none).
 
 **`flash_area` is in m², not km².** `units = "m2"`, `scale_factor ≈ 152601.86`. Correct values
 land at 70–770 km².
