@@ -1,3 +1,8 @@
+/**
+ * Most flashes a replay query returns; past this the results are cut off and
+ * the UI shows the truncation warning. Deliberately well under what the API
+ * could return: the cap is what the globe can draw without bogging down.
+ */
 export const MAX_LIMIT = 10_000;
 
 export const TEN_MIN_IN_SEC = 10 * 60;

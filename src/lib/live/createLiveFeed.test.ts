@@ -1,7 +1,7 @@
 import { LIVE_DEFAULT_RETENTION_SEC, LIVE_POLL_MS } from '@/constants';
 import type { Flash } from '@/lib/types';
-import type { GlmWorkerResponse } from './glm.worker';
-import { createLiveFeed } from './createLiveFeed';
+import type { GlmWorkerRequest, GlmWorkerResponse } from './glm.worker';
+import { createLiveFeed, DECODE_TIMEOUT_MS } from './createLiveFeed';
 import { dayOfYear, hourPrefix, listKeys, parseKeyTimes } from './glmS3';
 
 jest.mock('./glmS3', () => ({ ...jest.requireActual('./glmS3'), listKeys: jest.fn() }));
@@ -36,22 +36,34 @@ function flashFor(key: string): Flash {
   return { flash_time: at, lat: 45, lon: -110, energy_j: 1e-14, area_km2: 100, quality_flag: 0, flash_id: 1 };
 }
 
-/** Records every key it is asked to decode and answers after `delayMs`. Keys in `failing` always error. */
-function fakeWorker(decoded: string[], { delayMs = 1, failing = new Set<string>() } = {}) {
+/**
+ * Records every key it is asked to decode and answers after `delayMs`. Keys in
+ * `failing` always error; keys in `silent` are never answered at all.
+ */
+function fakeWorker(decoded: string[], { delayMs = 1, failing = new Set<string>(), silent = new Set<string>() } = {}) {
   const worker = {
     onmessage: null as ((event: { data: GlmWorkerResponse }) => void) | null,
     onerror: null,
-    postMessage(key: string) {
+    postMessage({ id, key }: GlmWorkerRequest) {
       decoded.push(key);
-      const data: GlmWorkerResponse = failing.has(key) ? { error: 'corrupt file' } : { flashes: [flashFor(key)] };
+      if (silent.has(key)) return;
+      const data: GlmWorkerResponse = failing.has(key)
+        ? { id, error: 'corrupt file' }
+        : { id, flashes: [flashFor(key)] };
       setTimeout(() => worker.onmessage?.({ data }), delayMs);
     },
   };
   return worker as unknown as Worker;
 }
 
-/** Files overlapping the last `minutes` before NOW, given the fake S3's newest file. */
-const filesInLast = (minutes: number) => Math.floor((s3.latestStartMs - (NOW - minutes * MINUTE)) / FILE_MS) + 1;
+/**
+ * The feed measures its window from the newest file the bucket has, not from
+ * the browser clock, so the tests do too.
+ */
+const anchor = () => s3.latestStartMs + FILE_MS;
+
+/** Files overlapping the last `minutes` of the window, given the fake S3's newest file. */
+const filesInLast = (minutes: number) => Math.floor((s3.latestStartMs - (anchor() - minutes * MINUTE)) / FILE_MS) + 1;
 const newestFirst = (keys: string[]) => [...keys].sort().reverse();
 
 beforeEach(() => {
@@ -126,7 +138,7 @@ test('it should trim immediately and notify subscribers when retention shrinks',
   feed.setRetention(10 * 60);
 
   expect(listener).toHaveBeenCalled();
-  const cutoff = Date.now() - 10 * MINUTE;
+  const cutoff = anchor() - 10 * MINUTE;
   const { flashes } = feed.getSnapshot();
   expect(flashes.length).toBeLessThan(filesInLast(DEFAULT_MINUTES));
   expect(flashes.every((flash) => Date.parse(flash.flash_time) >= cutoff)).toBe(true);
@@ -159,6 +171,82 @@ test('it should keep the same flashes array when a poll finds nothing new', asyn
 
   expect(jest.mocked(listKeys).mock.calls.length).toBeGreaterThan(listings);
   expect(feed.getSnapshot().flashes).toBe(flashes);
+});
+
+test('it should find the window when the browser clock is an hour off', async () => {
+  const decoded: string[] = [];
+  // Fast enough that the uncorrected window points at hour folders S3 has
+  // nothing in yet, which used to leave live mode blank with no error.
+  jest.setSystemTime(NOW + 65 * MINUTE);
+  const feed = createLiveFeed(() => fakeWorker(decoded));
+  feed.start();
+  await jest.advanceTimersByTimeAsync(1000);
+
+  expect(decoded).toHaveLength(filesInLast(DEFAULT_MINUTES));
+  expect(feed.getSnapshot().status.lastFileEndMs).toBe(anchor());
+  expect(feed.getSnapshot().flashes).toHaveLength(filesInLast(DEFAULT_MINUTES));
+});
+
+test('it should give up on a decode the worker never answers', async () => {
+  const decoded: string[] = [];
+  const stuck = keyFor(s3.latestStartMs); // newest, so pump reaches it first
+  const feed = createLiveFeed(() => fakeWorker(decoded, { silent: new Set([stuck]) }));
+  // The next successful poll clears the error again, so watch every publish.
+  const errors: (string | null)[] = [];
+  feed.subscribe(() => errors.push(feed.getSnapshot().status.error));
+  feed.start();
+  await jest.advanceTimersByTimeAsync(1000);
+
+  // Nothing settles the decode, so the queue cannot move until it times out.
+  expect(decoded).toEqual([stuck]);
+  expect(errors.every((error) => error === null)).toBe(true);
+
+  await jest.advanceTimersByTimeAsync(DECODE_TIMEOUT_MS);
+  expect(errors.some((error) => error?.includes('no reply'))).toBe(true);
+
+  // Two more tries, then it is given up on and the rest of the window backfills.
+  await jest.advanceTimersByTimeAsync(3 * DECODE_TIMEOUT_MS + 5 * LIVE_POLL_MS);
+  expect(decoded.filter((key) => key === stuck)).toHaveLength(3);
+  expect(feed.getSnapshot().flashes).toHaveLength(filesInLast(DEFAULT_MINUTES) - 1);
+});
+
+test('it should ignore a worker reply for a decode that is already settled', async () => {
+  const decoded: string[] = [];
+  const feed = createLiveFeed(() => {
+    const worker = {
+      onmessage: null as ((event: { data: GlmWorkerResponse }) => void) | null,
+      onerror: null,
+      postMessage({ id, key }: GlmWorkerRequest) {
+        decoded.push(key);
+        setTimeout(() => {
+          worker.onmessage?.({ data: { id, flashes: [flashFor(key)] } });
+          // A second answer to the same request must not settle the next file's
+          // decode, which would mark that file done with these flashes.
+          worker.onmessage?.({ data: { id, flashes: [] } });
+        }, 1);
+      },
+    };
+    return worker as unknown as Worker;
+  });
+  feed.start();
+  await jest.advanceTimersByTimeAsync(1000);
+
+  expect(decoded).toHaveLength(filesInLast(DEFAULT_MINUTES));
+  expect(feed.getSnapshot().flashes).toHaveLength(filesInLast(DEFAULT_MINUTES));
+});
+
+test('it should surface a worker that fails with no decode in flight', () => {
+  jest.mocked(listKeys).mockReturnValue(new Promise(() => {})); // listing never lands
+  let fail = () => {};
+  const feed = createLiveFeed(() => {
+    const worker = { onmessage: null, onerror: null as ((event: { message: string }) => void) | null, postMessage() {} };
+    fail = () => worker.onerror?.({ message: 'failed to load worker' });
+    return worker as unknown as Worker;
+  });
+  feed.start();
+  fail();
+
+  expect(feed.getSnapshot().status.error).toBe('failed to load worker');
 });
 
 test('it should keep the same snapshot until something changes', async () => {
