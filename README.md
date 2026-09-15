@@ -75,33 +75,38 @@ server, no ingest, no storage: the bucket answers both listing and downloads wit
 
 ```
 noaa-goes19 S3 (GLM-L2-LCFA, one ~350 KB file / 20 s)
-        |  ListObjectsV2 every 10 s          src/lib/live/glmS3.ts
+        |  ListObjectsV2 of the retention window every 10 s   src/lib/live/glmS3.ts
         v
-src/lib/live/createLiveFeed.ts  poll from page load, backfill the retention window, keep flashes in memory
+src/lib/live/createLiveFeed.ts  queue files not decoded yet, newest first; keep flashes in memory
         |  one key at a time
         v
 src/lib/live/glm.worker.ts   fetch -> h5wasm (readGlmFile.ts) -> decodeGlm.ts -> Flash[]
-        |  flashes back to liveFeed
+        |  flashes back to the feed
         v
-src/hooks/useLiveFlashes.ts  subscribes to liveFeed only while live mode is on
+src/hooks/useLiveFlashes.ts  subscribes to the feed only while live mode is on
         |
         v
-LightningApp / LightningGlobe  same table, summary and globe as replay
+LightningApp / LightningGlobe  same table and globe as replay
 ```
 
 - **Latency.** NOAA has no streaming API. Files appear in S3 roughly 8–10 s after the 20 s window
   they cover ends, so flashes are 10–30 s old when they reach the globe.
 - **Bandwidth.** ~1 MB/min per open tab in either mode. Page load also fetches the ~1 MB (gzipped) HDF5
   library and backfills the retention window, ~30 MB for the default 30 minutes. Widening the window
-  fetches only the older files it now covers (30 → 60 minutes is another ~30 MB).
-- **Queue order.** Files are decoded newest first, so recent flashes appear before the backfill finishes.
-  The backfill yields every poll interval, so a new file never waits behind it for more than ~10 s.
+  fetches only the older files it now covers (30 → 60 minutes is another ~30 MB). Listing the whole window
+  every poll adds ~200 KB/min at 30 minutes and ~400 KB/min at 60 (S3 listings run ~376 bytes per file).
+- **Queue order.** Every poll lists the whole window and queues the files not decoded yet, newest first.
+  That one rule covers the first load, a widened window and a tab that was hidden, and a new file never
+  waits behind a backfill for more than ~10 s.
 - **Why a store, not React state.** Holding live flashes in React state re-rendered the whole app after
-  every file, which stuttered replay playback. `createLiveFeed.ts` keeps them outside React and notifies only
-  on real changes; `useLiveFlashes` subscribes only in live mode, so replay never re-renders on a poll.
+  every file, which stuttered replay playback. `createLiveFeed.ts` keeps them outside React, and
+  `useLiveFlashes` subscribes only in live mode, so replay never re-renders on a poll.
 - **The globe clock** runs on `ClockStep.SYSTEM_CLOCK`, and every flash gets an availability window
   of the retention length, so points expire on their own between polls.
-- **Background tabs** have their timers throttled; returning to the tab triggers a catch-up poll.
+- **Hidden tabs** keep polling, though browsers slow their timers; the next poll after the tab returns
+  fills any gap.
+- **No `stop()`.** Signing out reloads the page, which ends the feed. The instance lives on `globalThis`
+  so a dev hot reload doesn't start a second one; edits to the feed need a browser refresh.
 - Checked against the database: decoding `OR_GLM-L2-LCFA_G19_s20262130000000` reproduces both
   ingested flashes to the microsecond. Energy and area differ past the 8th significant digit,
   because the Python path lands at float32 precision.

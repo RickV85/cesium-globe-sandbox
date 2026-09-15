@@ -1,41 +1,35 @@
 'use client';
 import { createContext, JSX, useMemo, useState } from 'react';
 
-/** Replay reads ingested flashes from the database; live reads NOAA's bucket directly. */
-export type AppMode = 'replay' | 'live';
-
 export type AppContext = {
+  /** Live reads NOAA's bucket directly; replay reads ingested flashes from the database. */
   isLive: boolean;
+  setIsLive: (newValue: boolean) => void;
   isTimeWindowEnabled: boolean;
   setIsTimeWindowEnabled: (newValue: boolean) => void;
-  mode: AppMode;
-  setMode: (newValue: AppMode) => void;
 };
 
 const defaultState: AppContext = {
   isLive: false,
+  setIsLive: () => undefined,
   isTimeWindowEnabled: false,
   setIsTimeWindowEnabled: () => undefined,
-  mode: 'replay',
-  setMode: () => undefined,
 };
 
 export const AppContext = createContext(defaultState);
 
 function AppContextValue(): AppContext {
+  const [isLive, setIsLive] = useState(defaultState.isLive);
   const [isTimeWindowEnabled, setIsTimeWindowEnabled] = useState(defaultState.isTimeWindowEnabled);
-  const [mode, setMode] = useState(defaultState.mode);
-  const isLive = mode === 'live';
 
   const value = useMemo(
     () => ({
       isLive,
+      setIsLive,
       isTimeWindowEnabled,
       setIsTimeWindowEnabled,
-      mode,
-      setMode,
     }),
-    [isLive, isTimeWindowEnabled, mode],
+    [isLive, isTimeWindowEnabled],
   );
 
   return value;

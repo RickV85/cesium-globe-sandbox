@@ -7,6 +7,7 @@ import 'cesium/Build/Cesium/Widgets/widgets.css';
 import { flashKey, type Flash } from '@/lib/types';
 import styles from './LightningGlobe.module.css';
 import { AppContext } from '@/app/contexts/AppContext';
+import { ROCKIES_BBOX } from '@/constants';
 
 /**
  * A request to point the camera at a flash.
@@ -23,10 +24,16 @@ type Props = {
   focus: FocusRequest | null;
   onSelect: (flash: Flash | null) => void;
   windowSeconds: number;
+  retentionSec: number;
 };
 
 /** The ingest bbox (Northern Rockies) — where the camera opens. */
-const HOME = Cesium.Rectangle.fromDegrees(-117, 41, -105, 49);
+const HOME = Cesium.Rectangle.fromDegrees(
+  ROCKIES_BBOX.west,
+  ROCKIES_BBOX.south,
+  ROCKIES_BBOX.east,
+  ROCKIES_BBOX.north,
+);
 
 /**
  * GLM flash energies span roughly 1e-15 to 1e-12 J — three decades — so the
@@ -57,8 +64,8 @@ function buildAvailability(flash: Flash, windowSeconds: number): Cesium.TimeInte
   return new Cesium.TimeIntervalCollection([new Cesium.TimeInterval({ start, stop })]);
 }
 
-export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds }: Props) {
-  const { isTimeWindowEnabled } = useContext(AppContext);
+export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds, retentionSec }: Props) {
+  const { isLive, isTimeWindowEnabled } = useContext(AppContext);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const handlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
@@ -138,6 +145,10 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
     if (!viewer || viewer.isDestroyed()) return;
 
     const entities = viewer.entities;
+    // Live mode always runs on the clock: a flash shows from its own time for the
+    // retention window, then expires even if no new poll has landed.
+    const timed = isLive || isTimeWindowEnabled;
+    const trailSeconds = isLive ? retentionSec : windowSeconds;
     // Batch: without this Cesium fires a change event per entity and the
     // visualizers re-run for every single one.
     entities.suspendEvents();
@@ -151,7 +162,7 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
 
       const existing = entities.getById(id);
       if (existing) {
-        existing.availability = isTimeWindowEnabled ? buildAvailability(flash, windowSeconds) : undefined;
+        existing.availability = timed ? buildAvailability(flash, trailSeconds) : undefined;
         continue;
       }
 
@@ -166,7 +177,7 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
           outlineWidth: 2,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
-        availability: isTimeWindowEnabled ? buildAvailability(flash, windowSeconds) : undefined,
+        availability: timed ? buildAvailability(flash, trailSeconds) : undefined,
       });
     }
 
@@ -178,7 +189,7 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
       }
     }
 
-    if (isTimeWindowEnabled) {
+    if (isTimeWindowEnabled && !isLive) {
       viewer.animation.container.classList.remove(styles.hidden);
       viewer.timeline.container.classList.remove(styles.hidden);
       viewer.forceResize();
@@ -189,13 +200,23 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
     }
 
     entities.resumeEvents();
-  }, [isTimeWindowEnabled, flashes, windowSeconds]);
+  }, [isTimeWindowEnabled, isLive, flashes, retentionSec, windowSeconds]);
 
   // --- Reset clock bounds on new data -----------------
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || viewer.isDestroyed()) return;
     const clock = viewer.clock;
+
+    if (isLive) {
+      // SYSTEM_CLOCK pins currentTime to wall time, so availability expires flashes on its own.
+      clock.clockRange = Cesium.ClockRange.UNBOUNDED;
+      clock.clockStep = Cesium.ClockStep.SYSTEM_CLOCK;
+      clock.currentTime = Cesium.JulianDate.now();
+      clock.shouldAnimate = true;
+      return;
+    }
+    clock.clockStep = Cesium.ClockStep.SYSTEM_CLOCK_MULTIPLIER;
 
     if (!flashes.length) {
       const now = Cesium.JulianDate.now();
@@ -227,7 +248,7 @@ export default function LightningGlobe({ flashes, focus, onSelect, windowSeconds
 
       viewer.timeline.zoomTo(start, stop);
     }
-  }, [flashes, windowSeconds]);
+  }, [flashes, isLive, windowSeconds]);
 
   // --- fly to a flash selected in the table ------------------------------
   useEffect(() => {

@@ -128,14 +128,10 @@ export default function LightningApp() {
   const truncated = fresh?.truncated ?? false;
   const hasBounds = bounds !== null;
 
-  // Live mode only swaps the source; the table, summary and globe don't care where flashes came from.
+  // Live mode only swaps the source; the table and globe don't care where flashes came from.
+  // Live flashes arrive newest first, so fresh ones land at the top of the table.
   const shownFlashes = isLive ? live.flashes : flashes;
-  const shownLoading = isLive ? !live.status.hasChecked : isLoading;
-  // Newest first in live mode, so fresh flashes land at the top of the table.
-  const tableFlashes = useMemo(
-    () => (isLive ? [...live.flashes].reverse() : flashes),
-    [isLive, live.flashes, flashes],
-  );
+  const shownLoading = isLive ? live.status.lastFileEndMs === null : isLoading;
 
   const setAppliedToFullExtent = useCallback((bounds: Bounds | null) => {
     if (!bounds?.earliest || !bounds.latest) return;
@@ -311,7 +307,7 @@ export default function LightningApp() {
             </p>
           )}
           {!isLive && (
-            <SummaryDisplay flashes={shownFlashes} isLoading={shownLoading} userGroup={userGroup} />
+            <SummaryDisplay flashes={flashes} isLoading={isLoading} userGroup={userGroup} />
           )}
           <h2>Selected flash data</h2>
           <div className={styles.tableWrap}>
@@ -326,7 +322,7 @@ export default function LightningApp() {
                 </tr>
               </thead>
               <tbody>
-                {tableFlashes.map((flash) => {
+                {shownFlashes.map((flash) => {
                   const key = flashKey(flash);
                   const isSelected = selected !== null && flashKey(selected) === key;
                   return (
@@ -363,7 +359,6 @@ export default function LightningApp() {
       </aside>
       <LightningGlobe
         flashes={shownFlashes}
-        isLive={isLive}
         retentionSec={retentionSec}
         focus={focus}
         onSelect={handleGlobeSelect}

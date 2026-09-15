@@ -3,14 +3,14 @@ import sharedStyles from './LightningApp.module.css';
 import { AppContext } from '@/app/contexts/AppContext';
 
 export default function LiveReplayToggle() {
-  const { isLive, setMode } = useContext(AppContext);
+  const { isLive, setIsLive } = useContext(AppContext);
   return (
     <div className={sharedStyles.buttonRow}>
       <button
         type="button"
         className={isLive ? sharedStyles.button : sharedStyles.primary}
         aria-pressed={!isLive}
-        onClick={() => setMode('replay')}
+        onClick={() => setIsLive(false)}
       >
         Replay
       </button>
@@ -18,7 +18,7 @@ export default function LiveReplayToggle() {
         type="button"
         className={isLive ? sharedStyles.primary : sharedStyles.button}
         aria-pressed={isLive}
-        onClick={() => setMode('live')}
+        onClick={() => setIsLive(true)}
       >
         Live
       </button>
