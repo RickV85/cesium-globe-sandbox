@@ -1,4 +1,4 @@
-import { ONE_DAY_IN_MS } from '@/constants';
+import { ONE_DAY_IN_MS, ONE_HOUR_IN_MS } from '@/constants';
 
 /*
  * NOAA's public GOES-19 bucket, read straight from the browser.
@@ -11,7 +11,6 @@ import { ONE_DAY_IN_MS } from '@/constants';
 
 const BUCKET_URL = 'https://noaa-goes19.s3.amazonaws.com';
 const PRODUCT = 'GLM-L2-LCFA';
-const ONE_HOUR_MS = 60 * 60 * 1000;
 
 const pad = (n: number, width: number) => String(n).padStart(width, '0');
 
@@ -29,7 +28,7 @@ export function hourPrefix(ms: number): string {
 /** Every hour folder touching [startMs, endMs], oldest first. */
 export function hourPrefixesBetween(startMs: number, endMs: number): string[] {
   const prefixes: string[] = [];
-  for (let t = Math.floor(startMs / ONE_HOUR_MS) * ONE_HOUR_MS; t <= endMs; t += ONE_HOUR_MS) {
+  for (let t = Math.floor(startMs / ONE_HOUR_IN_MS) * ONE_HOUR_IN_MS; t <= endMs; t += ONE_HOUR_IN_MS) {
     prefixes.push(hourPrefix(t));
   }
   return prefixes;
