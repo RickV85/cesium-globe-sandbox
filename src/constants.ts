@@ -22,3 +22,4 @@ export const LIVE_POLL_MS = 10_000;
 /** How long a flash stays on screen in live mode. The feed backfills the whole window: ~30 MB per 30 minutes. */
 export const LIVE_RETENTION_OPTIONS_SEC = [TEN_MIN_IN_SEC, 3 * TEN_MIN_IN_SEC, ONE_HOUR_IN_SEC];
 export const LIVE_DEFAULT_RETENTION_SEC = 3 * TEN_MIN_IN_SEC;
+export const LIVE_SHOW_PENDING_BACKFILL_DELAY_MS = 500;

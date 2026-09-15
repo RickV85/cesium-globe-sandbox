@@ -1,6 +1,6 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
-import { LIVE_POLL_MS, LIVE_RETENTION_OPTIONS_SEC } from '@/constants';
+import { LIVE_POLL_MS, LIVE_RETENTION_OPTIONS_SEC, LIVE_SHOW_PENDING_BACKFILL_DELAY_MS } from '@/constants';
 import type { LiveFeedStatus } from '@/lib/live/liveFeed';
 import sharedStyles from './LightningApp.module.css';
 
@@ -26,13 +26,29 @@ function ago(seconds: number): string {
 export default function LiveStatus({ status, retentionSec, onRetentionChange }: Props) {
   const now = useSyncExternalStore(subscribeToSeconds, nowSeconds, serverSeconds);
   const { lastFileEndMs, pendingFiles, error } = status;
+  const hasPendingFiles = pendingFiles > 0;
+  const [shouldShowPending, setShouldShowPending] = useState(false);
+
+  useEffect(() => {
+    if (!hasPendingFiles) return;
+
+    const timerId = window.setTimeout(() => {
+      setShouldShowPending(true);
+    }, LIVE_SHOW_PENDING_BACKFILL_DELAY_MS);
+
+    // When hasPendingFiles becomes false, this cleanup runs to reset state and clear timer
+    return () => {
+      window.clearTimeout(timerId);
+      setShouldShowPending(false);
+    };
+  }, [hasPendingFiles]);
 
   return (
     <div>
       <h2>Live GOES-19 feed</h2>
       <p className={sharedStyles.hint}>
-        Checks NOAA&apos;s public bucket every {LIVE_POLL_MS / 1000} s. Each GLM file covers 20 s and is published
-        about 10–30 s after the flashes in it. Nothing is stored.
+        Checks NOAA&apos;s public bucket every {LIVE_POLL_MS / 1000} s. Each GLM file covers 20 s and is
+        published about 10–30 s after the flashes in it. Nothing is stored.
       </p>
       <p className={sharedStyles.hint}>
         Newest data:
@@ -40,7 +56,7 @@ export default function LiveStatus({ status, retentionSec, onRetentionChange }: 
           {lastFileEndMs === null ? 'connecting…' : ago(now - Math.floor(lastFileEndMs / 1000))}
         </span>
       </p>
-      {pendingFiles > 0 && (
+      {hasPendingFiles && shouldShowPending && (
         <p className={sharedStyles.hint}>
           Backfilling:
           <span className={sharedStyles.count}>{pendingFiles} files queued</span>
